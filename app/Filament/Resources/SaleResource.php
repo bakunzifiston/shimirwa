@@ -31,26 +31,25 @@ class SaleResource extends Resource
                 ->label('Batches')
                 ->schema([
                     Forms\Components\Select::make('emballage_id')
-                        ->label('Select Emballage Batch')
+                        ->label('Packaging Batch')
                         ->options(fn() => Emballage::with('milling')
+                            ->where('item', '>', 0)
                             ->get()
                             ->mapWithKeys(fn ($emb) => [
-                                $emb->id => ($emb->milling?->batch_number ?? 'No Milling')
-                                    . " | Packaging: {$emb->packaging_type}"
-                                    . " | Stock: {$emb->item}"
-                                    
-                                    . " | Price: {$emb->unit_price}"
+                                $emb->id => "Batch: " . ($emb->packaging_batch_id ?? '—')
+                                    . " | Type: " . strtoupper($emb->packaging_type ?? '—')
+                                    . " | Stock: {$emb->item} units"
+                                    . " | Price: " . number_format($emb->unit_price ?? 0) . " RWF"
                             ])
                             ->toArray())
                         ->searchable()
                         ->required()
-                   
+                        ->reactive()
                         ->afterStateUpdated(function ($state, callable $set) {
                             if ($state) {
                                 $emb = Emballage::find($state);
                                 if ($emb) {
                                     $set('unit_price', $emb->unit_price);
-                               
                                     $set('line_total', $emb->unit_price);
                                 }
                             }
@@ -60,7 +59,7 @@ class SaleResource extends Resource
                         ->numeric()
                         ->minValue(1)
                         ->required()
-                      
+                        ->reactive()
                         ->afterStateUpdated(function ($state, callable $set, callable $get) {
                             $price = (float) $get('unit_price');
                             $set('line_total', $price * (int) $state);
@@ -96,14 +95,16 @@ class SaleResource extends Resource
                 ->dehydrated()
                 ->required(),
 
-            Forms\Components\BelongsToSelect::make('client_id')
+            Forms\Components\Select::make('client_id')
                 ->relationship('client', 'full_name')
                 ->searchable()
+                ->preload()
                 ->required(),
 
-            Forms\Components\BelongsToSelect::make('employee_id')
+            Forms\Components\Select::make('employee_id')
                 ->relationship('employee', 'full_name')
                 ->searchable()
+                ->preload()
                 ->required(),
 
             Forms\Components\TextInput::make('returned')
@@ -135,6 +136,7 @@ class SaleResource extends Resource
             Tables\Columns\TextColumn::make('created_at')->dateTime()->sortable(),
             Tables\Columns\TextColumn::make('updated_at')->dateTime()->sortable(),
         ])
+        ->defaultSort('created_at', 'desc')
         ->filters([])
         ->actions([
             Tables\Actions\ViewAction::make(),

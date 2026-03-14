@@ -61,6 +61,7 @@ class UserResource extends Resource
             ->filters([
                 //
             ])
+->defaultSort('created_at', 'desc')
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),

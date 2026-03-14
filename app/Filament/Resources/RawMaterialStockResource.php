@@ -57,7 +57,7 @@ Forms\Components\Select::make('item')
                 '5kg' => '5kg',
                 '1kg' => '1kg',
                 'Box' => 'Box',
-                'Sac' => 'Sac',
+                'Sack' => 'Sack',
               
             ],
             default => [],
@@ -157,6 +157,7 @@ Forms\Components\TextInput::make('item')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+->defaultSort('created_at', 'desc')
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),

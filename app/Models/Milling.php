@@ -116,5 +116,78 @@ class Milling extends Model
                 }
             }
         });
+
+        /*
+        |--------------------------------------------------------------------------
+        | Before Update → Recalculate totals
+        |--------------------------------------------------------------------------
+        */
+        static::updating(function ($milling) {
+
+            if (!$milling->isDirty('items') && !$milling->isDirty('loss')) {
+                return;
+            }
+
+            $total = 0;
+            foreach ($milling->items ?? [] as $item) {
+                $total += floatval($item['quantity'] ?? 0);
+            }
+
+            $loss = floatval($milling->loss ?? 0);
+
+            if ($loss > $total) {
+                throw new \Exception("Loss cannot exceed total mixed quantity ({$total} kg).");
+            }
+
+            $milling->total_mixed_quantity = $total;
+            $milling->output_flour         = max($total - $loss, 0);
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | After Update → Adjust stock deductions if items changed
+        |--------------------------------------------------------------------------
+        */
+        static::updated(function ($milling) {
+
+            if (!$milling->wasChanged('items')) {
+                return;
+            }
+
+            $oldItems = json_decode($milling->getOriginal('items') ?? '[]', true) ?? [];
+            $newItems = $milling->items ?? [];
+
+            // Build maps: [stock_type:stock_id => qty]
+            $buildMap = function (array $items): array {
+                $map = [];
+                foreach ($items as $item) {
+                    $key = ($item['type'] ?? '') . ':' . ($item['stock_id'] ?? '');
+                    $map[$key] = ($map[$key] ?? 0) + floatval($item['quantity'] ?? 0);
+                }
+                return $map;
+            };
+
+            $oldMap = $buildMap($oldItems);
+            $newMap = $buildMap($newItems);
+            $allKeys = array_unique(array_merge(array_keys($oldMap), array_keys($newMap)));
+
+            foreach ($allKeys as $key) {
+                [$type, $stockId] = explode(':', $key, 2);
+                if (!$type || !$stockId) continue;
+
+                $diff = ($newMap[$key] ?? 0) - ($oldMap[$key] ?? 0);
+                if ($diff == 0) continue;
+
+                $batch = in_array($type, ['soy', 'maize'])
+                    ? Roasting::find($stockId)
+                    : Sorting::find($stockId);
+
+                if ($batch) {
+                    $batch->quantity_in -= $diff;
+                    if ($batch->quantity_in < 0) $batch->quantity_in = 0;
+                    $batch->save();
+                }
+            }
+        });
     }
 }

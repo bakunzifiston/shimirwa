@@ -32,10 +32,10 @@ class MillingResource extends Resource
                     Forms\Components\Select::make('type')
                         ->label('Ingredient')
                         ->options([
-                            'soy' => 'Soy',
+                            'soy'     => 'Soy',
                             'sorghum' => 'Sorghum',
-                            'wheat' => 'Wheat',
-                            'maize' => 'Maize',
+                            'wheat'   => 'Wheat',
+                            'maize'   => 'Maize',
                         ])
                         ->required()
                         ->reactive(),
@@ -52,7 +52,7 @@ class MillingResource extends Resource
                                     Roasting::where('quantity_in', '>', 0)
                                         ->get()
                                         ->mapWithKeys(fn ($s) =>
-                                            [$s->id => "{$s->item} - {$s->batch} ({$s->quantity_in} kg left)"]
+                                            [$s->id => "{$s->batch} ({$s->quantity_in} kg left)"]
                                         ),
 
                                 'sorghum', 'wheat' =>
@@ -79,8 +79,9 @@ class MillingResource extends Resource
                 ])
                 ->minItems(1)
                 ->columns(3)
-                ->afterStateUpdated(fn ($state, callable $set) =>
-                    self::computeTotalsRepeater($state, $set)
+                // Pass current loss value so output_flour is correct immediately
+                ->afterStateUpdated(fn ($state, callable $set, callable $get) =>
+                    self::computeTotalsRepeater($state, $set, (float) $get('loss'))
                 ),
 
             Forms\Components\TextInput::make('loss')
@@ -88,27 +89,35 @@ class MillingResource extends Resource
                 ->default(0)
                 ->reactive()
                 ->afterStateUpdated(function ($state, callable $set, callable $get) {
-                    self::computeTotalsRepeater($get('items'), $set);
+                    self::computeTotalsRepeater($get('items'), $set, (float) $state);
                 }),
 
+            // total_mixed_quantity — display only, saved via model event
             Forms\Components\TextInput::make('total_mixed_quantity')
+                ->label('Total Mixed (kg)')
                 ->disabled()
-                ->dehydrated(false),
+                ->dehydrated()
+                ->helperText('Sum of all ingredient quantities'),
 
+            // output_flour — display only, saved via model event
             Forms\Components\TextInput::make('output_flour')
+                ->label('Output Flour (kg)')
                 ->disabled()
-                ->dehydrated(false),
+                ->dehydrated()
+                ->helperText('Total Mixed − Loss'),
 
             Forms\Components\TextInput::make('batch_number')
                 ->required(),
 
-            Forms\Components\BelongsToSelect::make('employee_id')
+            Forms\Components\Select::make('employee_id')
                 ->relationship('employee', 'full_name')
+                ->searchable()
+                ->preload()
                 ->required(),
         ]);
     }
 
-    private static function computeTotalsRepeater($items, callable $set)
+    private static function computeTotalsRepeater($items, callable $set, float $loss = 0): void
     {
         $total = 0;
 
@@ -118,7 +127,6 @@ class MillingResource extends Resource
             }
         }
 
-        $loss = (float) request()->input('data.loss', 0);
         $set('total_mixed_quantity', $total);
         $set('output_flour', max($total - $loss, 0));
     }
@@ -142,6 +150,7 @@ class MillingResource extends Resource
             TextColumn::make('created_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('updated_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
         ])
+->defaultSort('created_at', 'desc')
         ->actions([
             Tables\Actions\ViewAction::make(),
             Tables\Actions\EditAction::make(),
