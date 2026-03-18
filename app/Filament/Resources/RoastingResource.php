@@ -41,7 +41,11 @@ class RoastingResource extends Resource
                 // Step 2a: Raw Material Stock batch selector
                 BelongsToSelect::make('raw_material_stock_id')
                     ->label('Batch (Raw Material)')
-                    ->relationship('rawMaterialStock', 'batch_number')
+                    ->relationship(
+                        'rawMaterialStock',
+                        'batch_number',
+                        fn ($query) => $query->where('quantity_in', '>', 0),
+                    )
                     ->getOptionLabelFromRecordUsing(function (RawMaterialStock $record) {
                         return "{$record->item} - {$record->batch_number} (Available: {$record->quantity_in} kg)";
                     })
@@ -57,7 +61,11 @@ class RoastingResource extends Resource
                 // Step 2b: Sorting batch selector
                 BelongsToSelect::make('sorting_id')
                     ->label('Batch (Sorting)')
-                    ->relationship('sorting', 'id')
+                    ->relationship(
+                        'sorting',
+                        'id',
+                        fn ($query) => $query->where('quantity_in', '>', 0),
+                    )
                     ->getOptionLabelFromRecordUsing(function (Sorting $record) {
                         $stock = $record->rawMaterialStock;
                         return $stock
