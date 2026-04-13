@@ -37,6 +37,26 @@ class Milling extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    /**
+     * `items` is cast to array, so getOriginal('items') may be an array or (from DB) a JSON string.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected static function normalizeMillingItems(mixed $value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if (is_string($value) && $value !== '') {
+            $decoded = json_decode($value, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
+
     /*
     |--------------------------------------------------------------------------
     | MODEL EVENTS - VALIDATION + DEDUCTION
@@ -154,8 +174,8 @@ class Milling extends Model
                 return;
             }
 
-            $oldItems = json_decode($milling->getOriginal('items') ?? '[]', true) ?? [];
-            $newItems = $milling->items ?? [];
+            $oldItems = self::normalizeMillingItems($milling->getOriginal('items'));
+            $newItems = self::normalizeMillingItems($milling->items);
 
             // Build maps: [stock_type:stock_id => qty]
             $buildMap = function (array $items): array {
