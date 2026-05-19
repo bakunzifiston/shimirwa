@@ -23,11 +23,12 @@ class Sale extends Model
         'reason',
     ];
 
-  protected $casts = [
-    'batches' => 'array',      // important
-    'total_price' => 'decimal:2',
-    'quantity' => 'integer',
-];
+    protected $casts = [
+        'date' => 'date',
+        'batches' => 'array',
+        'total_price' => 'decimal:2',
+        'quantity' => 'integer',
+    ];
 
     // Relationships
     public function client() { return $this->belongsTo(Client::class); }
@@ -55,7 +56,9 @@ class Sale extends Model
                     $emb = Emballage::lockForUpdate()->find($entry['emballage_id'] ?? null);
                     $qty = isset($entry['quantity']) && is_numeric($entry['quantity']) ? (int)$entry['quantity'] : 0;
                     if ($emb && $qty > 0) {
-                        if ($qty > $emb->quantity) throw new Exception("Not enough stock in batch {$emb->batch}");
+                        if ($qty > $emb->item) {
+                            throw new Exception("Not enough stock in batch {$emb->batch}");
+                        }
                         $emb->decrement('item', $qty);
                     }
                 }
@@ -65,8 +68,8 @@ class Sale extends Model
         // Adjust stock after update
         static::updated(function ($sale) {
             DB::transaction(function () use ($sale) {
-                $originalBatches = json_decode($sale->getOriginal('batches') ?? '[]', true);
-                $originalBatches = is_array($originalBatches) ? $originalBatches : [];
+                $original = $sale->getOriginal('batches');
+                $originalBatches = is_array($original) ? $original : (json_decode($original ?? '[]', true) ?: []);
                 $newBatches = $sale->batches ?? [];
 
                 $oldMap = []; $newMap = [];
@@ -81,9 +84,15 @@ class Sale extends Model
 
                     $emb = Emballage::lockForUpdate()->find($id);
                     if ($emb) {
-                        if ($diff > 0 && $diff > $emb->quantity) throw new Exception("Not enough stock in batch {$emb->batch}");
-                        if ($diff > 0) $emb->decrement('quantity', $diff);
-                        if ($diff < 0) $emb->increment('quantity', abs($diff));
+                        if ($diff > 0 && $diff > $emb->item) {
+                            throw new Exception("Not enough stock in batch {$emb->batch}");
+                        }
+                        if ($diff > 0) {
+                            $emb->decrement('item', $diff);
+                        }
+                        if ($diff < 0) {
+                            $emb->increment('item', abs($diff));
+                        }
                     }
                 }
             });
@@ -95,7 +104,9 @@ class Sale extends Model
                 foreach ($sale->batches ?? [] as $entry) {
                     $emb = Emballage::lockForUpdate()->find($entry['emballage_id'] ?? null);
                     $qty = isset($entry['quantity']) && is_numeric($entry['quantity']) ? (int)$entry['quantity'] : 0;
-                    if ($emb && $qty > 0) $emb->increment('quantity', $qty);
+                    if ($emb && $qty > 0) {
+                        $emb->increment('item', $qty);
+                    }
                 }
             });
         });

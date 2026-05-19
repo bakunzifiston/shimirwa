@@ -9,6 +9,13 @@ class RawMaterialStock extends Model
 {
     use HasFactory;
 
+    protected $casts = [
+        'date' => 'date',
+        'received' => 'float',
+        'rejected' => 'float',
+        'quantity_in' => 'float',
+    ];
+
     protected $fillable = [
     'date',
     'client_id',
@@ -32,11 +39,18 @@ class RawMaterialStock extends Model
         return $this->belongsTo(Client::class, 'client_id');
     }
 
+    public function scopePackagingStaff($query)
+    {
+        return $query->whereIn('type', ['Packaging Staff', 'packaging staff']);
+    }
+
     protected static function booted()
     {
-        // Only calculate quantity_in when creating a new stock record
-        static::creating(function ($stock) {
-            $stock->quantity_in = $stock->received - $stock->rejected;
-        });
+        $recalculateNet = function (RawMaterialStock $stock): void {
+            $stock->quantity_in = max((float) $stock->received - (float) $stock->rejected, 0);
+        };
+
+        static::creating($recalculateNet);
+        static::updating($recalculateNet);
     }
 }

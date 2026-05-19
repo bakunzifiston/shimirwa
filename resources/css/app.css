@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+/* Admin styles are a separate Vite entry so Tailwind v4 does not strip them on build. */
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';

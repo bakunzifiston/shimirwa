@@ -9,6 +9,10 @@ class Employee extends Model
 {
     use HasFactory;
 
+    protected $casts = [
+        'start_date' => 'date',
+    ];
+
     protected $fillable = [
         'full_name',
         'national_id',

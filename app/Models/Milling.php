@@ -23,6 +23,7 @@ class Milling extends Model
     ];
 
     protected $casts = [
+        'date' => 'date',
         'items' => 'array',
     ];
 

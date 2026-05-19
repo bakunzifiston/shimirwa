@@ -10,6 +10,11 @@ class Emballage extends Model
 {
     use HasFactory;
 
+    protected $casts = [
+        'date' => 'date',
+        'expiry_date' => 'date',
+    ];
+
     protected $fillable = [
         'date',
         'packaging_batch_id',
@@ -73,7 +78,7 @@ class Emballage extends Model
     protected static function failMillingFlourAvailability(string $message): never
     {
         throw ValidationException::withMessages([
-            'data.milling_id' => $message,
+            'milling_id' => $message,
         ]);
     }
 

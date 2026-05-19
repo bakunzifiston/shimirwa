@@ -14,6 +14,10 @@ class Roasting extends Model
 
     protected $afterCommit = true;
 
+    protected $casts = [
+        'date' => 'date',
+    ];
+
     protected $fillable = [
         'date',
         'quantity_in',       // total quantity taken from stock

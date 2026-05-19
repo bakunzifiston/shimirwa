@@ -14,6 +14,10 @@ class Sorting extends Model
     // Ensure events are fired after database commit
     protected $afterCommit = true;
 
+    protected $casts = [
+        'date' => 'date',
+    ];
+
     protected $fillable = [
         'date',
         'raw_material_stock_id', // FK to stock batch

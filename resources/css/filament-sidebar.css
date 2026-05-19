@@ -1,0 +1,153 @@
+/**
+ * Filament admin sidebar — tweak variables to change colors.
+ * After edits: npm run build   (or npm run install-build)
+ */
+:root {
+    --app-sidebar-bg: #0a3d6b;
+    --app-sidebar-header-bg: #082f57;
+    --app-sidebar-border: rgba(255, 255, 255, 0.12);
+    /* High contrast on blue */
+    --app-sidebar-text: #f8fafc;
+    --app-sidebar-muted: #cbd5e1;
+    --app-sidebar-hover: rgba(255, 255, 255, 0.1);
+    --app-sidebar-active-bg: rgba(255, 255, 255, 0.15);
+    --app-sidebar-active-text: #e0f2fe;
+    --app-sidebar-active-icon: #7dd3fc;
+}
+
+.dark {
+    --app-sidebar-bg: #071e36;
+    --app-sidebar-header-bg: #051428;
+    --app-sidebar-border: rgba(255, 255, 255, 0.1);
+    --app-sidebar-text: #f8fafc;
+    --app-sidebar-muted: #cbd5e1;
+    --app-sidebar-hover: rgba(255, 255, 255, 0.08);
+    --app-sidebar-active-bg: rgba(255, 255, 255, 0.12);
+    --app-sidebar-active-text: #e0f2fe;
+    --app-sidebar-active-icon: #7dd3fc;
+}
+
+.fi-body aside.fi-sidebar.fi-main-sidebar {
+    background-color: var(--app-sidebar-bg) !important;
+    color: var(--app-sidebar-text);
+}
+
+@media (min-width: 1024px) {
+    .fi-body aside.fi-sidebar.fi-main-sidebar {
+        background-color: var(--app-sidebar-bg) !important;
+    }
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-header {
+    background-color: var(--app-sidebar-header-bg) !important;
+    color: var(--app-sidebar-text);
+    box-shadow: none;
+    border-color: var(--app-sidebar-border);
+}
+
+/* Nav area default text */
+.fi-body aside.fi-sidebar .fi-sidebar-nav {
+    color: var(--app-sidebar-text);
+}
+
+/* Item row + label: Filament sets text-gray-* on the label span — override */
+.fi-body aside.fi-sidebar .fi-sidebar-item-button {
+    color: var(--app-sidebar-text) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-item-label {
+    color: var(--app-sidebar-text) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-item.fi-active .fi-sidebar-item-label {
+    color: var(--app-sidebar-active-text) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-item-icon {
+    color: var(--app-sidebar-muted) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-item.fi-active .fi-sidebar-item-icon {
+    color: var(--app-sidebar-active-icon) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-item-button:hover,
+.fi-body aside.fi-sidebar .fi-sidebar-item-button:focus-visible {
+    background-color: var(--app-sidebar-hover) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-item.fi-active .fi-sidebar-item-button {
+    background-color: var(--app-sidebar-active-bg) !important;
+}
+
+/* Group header row */
+.fi-body aside.fi-sidebar .fi-sidebar-group-button {
+    color: var(--app-sidebar-text) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-group-button:hover {
+    background-color: var(--app-sidebar-hover) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-group-label {
+    color: var(--app-sidebar-muted) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-group-icon {
+    color: var(--app-sidebar-muted) !important;
+}
+
+/* Collapsed-rail group icon button */
+.fi-body aside.fi-sidebar .fi-sidebar-group > .fi-dropdown > .fi-dropdown-trigger button {
+    color: var(--app-sidebar-text);
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-group > .fi-dropdown > .fi-dropdown-trigger button:hover,
+.fi-body aside.fi-sidebar .fi-sidebar-group > .fi-dropdown > .fi-dropdown-trigger button:focus-visible {
+    background-color: var(--app-sidebar-hover) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-group > .fi-dropdown > .fi-dropdown-trigger button svg,
+.fi-body aside.fi-sidebar .fi-sidebar-group > .fi-dropdown > .fi-dropdown-trigger .fi-icon {
+    color: var(--app-sidebar-muted) !important;
+}
+
+/* Sub-navigation under an item */
+.fi-body aside.fi-sidebar .fi-sidebar-sub-group-items .fi-sidebar-item-label {
+    color: var(--app-sidebar-muted) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-sub-group-items .fi-sidebar-item.fi-active .fi-sidebar-item-label {
+    color: var(--app-sidebar-active-text) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-group-items {
+    border-color: var(--app-sidebar-border);
+}
+
+/* Connector lines + dot between grouped sub-items */
+.fi-body aside.fi-sidebar .fi-sidebar-item-grouped-border .w-px {
+    background-color: var(--app-sidebar-border) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-item-grouped-border .rounded-full {
+    background-color: var(--app-sidebar-muted) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-item.fi-active .fi-sidebar-item-grouped-border .rounded-full {
+    background-color: var(--app-sidebar-active-icon) !important;
+}
+
+/* Header: expand/collapse icon buttons */
+.fi-body aside.fi-sidebar .fi-sidebar-header .fi-icon-btn {
+    color: var(--app-sidebar-text);
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-header .fi-icon-btn:hover,
+.fi-body aside.fi-sidebar .fi-sidebar-header .fi-icon-btn:focus-visible {
+    background-color: var(--app-sidebar-hover) !important;
+}
+
+.fi-body aside.fi-sidebar .fi-sidebar-header .fi-icon-btn svg {
+    color: inherit;
+}

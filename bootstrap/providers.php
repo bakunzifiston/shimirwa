@@ -2,5 +2,5 @@
 
 return [
     App\Providers\AppServiceProvider::class,
-    App\Providers\Filament\AdminPanelProvider::class,
+    // Filament removed — custom admin panel at /admin (see routes/admin.php)
 ];
