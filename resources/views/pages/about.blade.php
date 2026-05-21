@@ -1,38 +1,21 @@
 @extends('layouts.site')
 
 @section('title', 'About Us')
-@section('meta_description', 'Learn about Shimirwa Ltd — our mission, values, team, and milestones in soybean processing.')
+@section('meta_description', config('site.about.who_we_are'))
 
 @section('content')
-    <section class="site-page-hero">
+    <section class="site-page-hero site-page-hero--about">
         <div class="site-container site-reveal">
-            <span class="site-eyebrow">About us</span>
-            <h1>Processing excellence rooted in Rwanda</h1>
-            <p>From careful sourcing to modern roasting, milling, and packaging — we deliver quality at every step.</p>
+            <span class="site-eyebrow">{{ config('site.about.hero_eyebrow') }}</span>
+            <h1>{{ config('site.about.hero_title') }}</h1>
         </div>
     </section>
 
     <section class="site-section">
         <div class="site-container">
-            <div class="site-grid-2" style="align-items:center">
-                <div class="site-reveal">
-                    <h2>Our story</h2>
-                    <p>
-                        {{ config('site.name') }} specializes in soybean processing — roasting, sorting, milling,
-                        and packaging products for households, retailers, and wholesale partners.
-                    </p>
-                    <p>
-                        Our integrated inventory management ensures traceability from raw materials through
-                        finished goods, so every batch meets the standards our clients expect.
-                    </p>
-                </div>
-                <div class="site-card site-reveal">
-                    <h3 style="margin-top:0">Our mission</h3>
-                    <p style="margin-bottom:0">
-                        To provide nutritious, high-quality soybean products while supporting local farmers
-                        and building lasting partnerships across the supply chain.
-                    </p>
-                </div>
+            <div class="site-about-intro site-reveal">
+                <h2>{{ config('site.about.who_we_are_title') }}</h2>
+                <p>{{ config('site.about.who_we_are') }}</p>
             </div>
         </div>
     </section>
@@ -40,15 +23,16 @@
     <section class="site-section site-section-alt">
         <div class="site-container">
             <header class="site-section-header site-reveal">
-                <span class="site-eyebrow">What we stand for</span>
-                <h2>Vision &amp; core values</h2>
-                <p>Guiding principles that shape how we work with farmers, staff, and customers.</p>
+                <h2 id="values-heading">{{ config('site.about.values_title') }}</h2>
             </header>
-            <div class="site-grid-2">
-                @foreach ($values as $value)
-                    <article class="site-card site-reveal">
-                        <h3 style="margin-top:0;color:var(--site-primary)">{{ $value['title'] }}</h3>
-                        <p style="margin:0">{{ $value['text'] }}</p>
+            <div class="site-about-values">
+                @foreach (config('site.about.values') as $value)
+                    <article class="site-about-value site-reveal">
+                        <span class="site-about-value-num" aria-hidden="true">{{ $value['number'] }}</span>
+                        <div>
+                            <h3>{{ $value['title'] }}</h3>
+                            <p>{{ $value['text'] }}</p>
+                        </div>
                     </article>
                 @endforeach
             </div>
@@ -56,38 +40,9 @@
     </section>
 
     <section class="site-section">
-        <div class="site-container">
-            <header class="site-section-header site-reveal">
-                <span class="site-eyebrow">Our people</span>
-                <h2>Team &amp; leadership</h2>
-            </header>
-            <div class="site-grid-3">
-                @foreach ($team as $member)
-                    <article class="site-card site-reveal">
-                        <h3 style="margin-top:0">{{ $member['name'] }}</h3>
-                        <p style="font-weight:600;color:var(--site-secondary);margin:0 0 0.75rem">{{ $member['role'] }}</p>
-                        <p style="margin:0">{{ $member['bio'] }}</p>
-                    </article>
-                @endforeach
-            </div>
-        </div>
-    </section>
-
-    <section class="site-section site-section-alt">
-        <div class="site-container">
-            <header class="site-section-header site-reveal">
-                <span class="site-eyebrow">Milestones</span>
-                <h2>Our journey</h2>
-            </header>
-            <div class="site-timeline" style="max-width:36rem;margin:0 auto">
-                @foreach ($milestones as $milestone)
-                    <div class="site-timeline-item site-reveal">
-                        <div class="site-timeline-year">{{ $milestone['year'] }}</div>
-                        <h3 style="margin:0.25rem 0">{{ $milestone['title'] }}</h3>
-                        <p style="margin:0;color:var(--site-text-muted)">{{ $milestone['text'] }}</p>
-                    </div>
-                @endforeach
-            </div>
+        <div class="site-container site-reveal" style="display:flex;flex-wrap:wrap;gap:0.75rem;justify-content:center">
+            <x-site.button :href="route('shop.index')" size="site-btn-lg">Explore our products</x-site.button>
+            <x-site.button :href="route('contact')" variant="secondary" size="site-btn-lg">Contact us</x-site.button>
         </div>
     </section>
 @endsection

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Site;
 
 use App\Http\Controllers\Controller;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -10,37 +11,38 @@ class ShopController extends Controller
 {
     public function index(Request $request): View
     {
-        $products = collect(config('site.products'));
         $search = $request->string('q')->trim()->toString();
-        $category = $request->string('category')->toString();
+        $stock = $request->string('stock')->toString();
 
-        if ($search !== '') {
-            $products = $products->filter(fn ($p) => str_contains(strtolower($p['name'].' '.$p['short']), strtolower($search)));
-        }
+        $products = Product::query()
+            ->active()
+            ->with(['images' => fn ($q) => $q->orderBy('sort_order')])
+            ->when($search, fn ($q) => $q->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            }))
+            ->when($stock === 'in_stock', fn ($q) => $q->where('stock_quantity', '>', 0))
+            ->when($stock === 'out_of_stock', fn ($q) => $q->where('stock_quantity', '<=', 0))
+            ->orderBy('name')
+            ->paginate(12)
+            ->withQueryString();
 
-        if ($category !== '' && $category !== 'all') {
-            $products = $products->where('category', $category);
-        }
-
-        return view('pages.shop.index', [
-            'products' => $products->values(),
-            'search' => $search,
-            'category' => $category ?: 'all',
-            'categories' => config('site.product_categories'),
-        ]);
+        return view('pages.shop.index', compact('products', 'search', 'stock'));
     }
 
-    public function show(string $slug): View
+    public function show(Product $product): View
     {
-        $product = collect(config('site.products'))->firstWhere('slug', $slug);
+        abort_unless($product->isActive(), 404);
 
-        abort_unless($product, 404);
+        $product->load('images');
 
-        $related = collect(config('site.products'))
-            ->where('slug', '!=', $slug)
-            ->where('category', $product['category'])
-            ->take(3)
-            ->values();
+        $related = Product::query()
+            ->active()
+            ->where('id', '!=', $product->id)
+            ->inStock()
+            ->with('images')
+            ->limit(3)
+            ->get();
 
         return view('pages.shop.show', compact('product', 'related'));
     }

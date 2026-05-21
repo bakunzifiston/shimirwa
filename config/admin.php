@@ -51,6 +51,13 @@ return [
                 ['label' => 'Sales', 'route' => 'admin.sales.index', 'icon' => 'cart'],
             ],
         ],
+        [
+            'group' => 'E-commerce',
+            'items' => [
+                ['label' => 'Products', 'route' => 'admin.products.index', 'icon' => 'package'],
+                ['label' => 'Orders', 'route' => 'admin.orders.index', 'icon' => 'cart'],
+            ],
+        ],
     ],
 
     'stat_icons' => [

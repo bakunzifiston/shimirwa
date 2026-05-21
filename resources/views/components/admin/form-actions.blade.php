@@ -1,6 +1,6 @@
 @props(['cancelRoute', 'submitLabel' => 'Save'])
 
-<div {{ $attributes->merge(['class' => 'admin-form-actions']) }}>
+<div {{ $attributes->except(['cancelParams', 'cancel-params'])->merge(['class' => 'admin-form-actions']) }}>
     <button type="submit" class="admin-btn admin-btn-primary">
         {{ $submitLabel }}
     </button>

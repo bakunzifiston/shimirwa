@@ -6,6 +6,8 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EmballageController;
 use App\Http\Controllers\Admin\EmployeeController;
 use App\Http\Controllers\Admin\MillingController;
+use App\Http\Controllers\Admin\OrderController;
+use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\RawMaterialStockController;
 use App\Http\Controllers\Admin\RoastingController;
 use App\Http\Controllers\Admin\SaleController;
@@ -33,5 +35,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('emballages', EmballageController::class);
         Route::resource('sales', SaleController::class);
         Route::resource('users', UserController::class);
+
+        Route::resource('products', ProductController::class);
+        Route::resource('orders', OrderController::class)->only(['index', 'show', 'update']);
     });
 });

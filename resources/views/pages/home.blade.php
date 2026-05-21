@@ -4,37 +4,7 @@
 @section('meta_description', config('site.tagline'))
 
 @section('content')
-    @php
-        $logo = config('site.logo');
-        $logoUrl = $logo && ! str_starts_with($logo, 'http') ? asset($logo) : $logo;
-    @endphp
-
-    <section class="site-hero" aria-labelledby="hero-heading">
-        <div class="site-container site-hero-grid">
-            <div>
-                <span class="site-eyebrow" style="color: var(--site-secondary-light)">{{ config('site.hero.eyebrow') }}</span>
-                <h1 id="hero-heading">{{ config('site.hero.headline') }}</h1>
-                <p class="site-hero-lead">{{ config('site.hero.lead') }}</p>
-                <p class="site-hero-desc">{{ config('site.hero.description') }}</p>
-                <div class="site-hero-actions">
-                    <x-site.button :href="route('shop.index')" variant="accent" size="site-btn-lg">
-                        Browse products
-                    </x-site.button>
-                    <x-site.button :href="route('contact')" variant="secondary" size="site-btn-lg" style="color:#fff;border-color:#fff">
-                        Contact us
-                    </x-site.button>
-                </div>
-            </div>
-            <div class="site-hero-visual site-reveal">
-                <div class="site-hero-card">
-                    @if ($logoUrl)
-                        <img src="{{ $logoUrl }}" alt="{{ config('site.name') }} logo">
-                    @endif
-                    <p style="margin:0;font-weight:600">{{ config('site.hero.card_text') }}</p>
-                </div>
-            </div>
-        </div>
-    </section>
+    <x-site.banner-slider />
 
     <x-site.vision-mission />
 

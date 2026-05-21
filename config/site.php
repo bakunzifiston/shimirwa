@@ -14,6 +14,17 @@ return [
         'card_text' => 'Maize · Sorghum · Soy',
     ],
 
+    'banners' => [
+        [
+            'image' => 'images/banners/banner-products.png',
+            'alt' => 'BINO and KURA flour range — composite, wheat, sorghum, and millet flours made in Rwanda',
+        ],
+        [
+            'image' => 'images/banners/banner-brand-ambassador.png',
+            'alt' => 'BINO and KURA composite flour — proudly made in Rwanda',
+        ],
+    ],
+
     'mission' => [
         'title' => 'Our Mission',
         'text' => 'To process and deliver high-quality agricultural products while supporting local producers and ensuring food safety.',
@@ -49,6 +60,36 @@ return [
         ['value' => '50+', 'label' => 'Partner retailers'],
         ['value' => '12K+', 'label' => 'Kg processed monthly'],
         ['value' => '100%', 'label' => 'Quality assured'],
+    ],
+
+    'about' => [
+        'hero_eyebrow' => 'About Us',
+        'hero_title' => 'SHIMIRWA COMPANY Ltd',
+        'who_we_are_title' => 'Who We Are',
+        'who_we_are' => 'SHIMIRWA COMPANY Ltd is a proudly Rwandan agri-business dedicated to adding value to local produce and driving agricultural transformation. By working hand-in-hand with smallholder farmers and cooperatives, we create fair market opportunities, promote sustainable practices, and ensure traceability from farm to shelf.',
+        'values_title' => 'Our Core Values',
+        'values' => [
+            [
+                'number' => '01',
+                'title' => 'Integrity & Trust',
+                'text' => 'We build lasting relationships through honesty and transparency.',
+            ],
+            [
+                'number' => '02',
+                'title' => 'Quality Assurance',
+                'text' => 'Every product undergoes strict control to meet the highest standards.',
+            ],
+            [
+                'number' => '03',
+                'title' => 'Sustainability',
+                'text' => 'We prioritize eco-friendly practices and support long-term farmer livelihoods.',
+            ],
+            [
+                'number' => '04',
+                'title' => 'Innovation',
+                'text' => 'We continuously improve processes to stay ahead of market needs.',
+            ],
+        ],
     ],
 
     'values' => [

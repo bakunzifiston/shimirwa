@@ -77,15 +77,37 @@
         });
     }
 
+    function initProductImageUpload() {
+        const input = document.getElementById('images');
+        const hint = document.getElementById('images-filename');
+        if (!input) return;
+
+        input.addEventListener('change', () => {
+            if (!hint) return;
+            if (input.files?.length) {
+                const names = Array.from(input.files).map((f) => f.name);
+                hint.hidden = false;
+                hint.textContent = names.length === 1
+                    ? `Selected: ${names[0]}`
+                    : `Selected ${names.length} files: ${names.join(', ')}`;
+            } else {
+                hint.hidden = true;
+                hint.textContent = '';
+            }
+        });
+    }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             initTheme();
             initSidebar();
             initFlashDismiss();
+            initProductImageUpload();
         });
     } else {
         initTheme();
         initSidebar();
         initFlashDismiss();
+        initProductImageUpload();
     }
 })();
