@@ -174,22 +174,10 @@ a:hover {
     flex-shrink: 0;
 }
 
-.site-btn-label-short {
-    display: none;
-}
-
 @media (max-width: 767px) {
     .site-header-login {
         padding: 0.4375rem 0.625rem;
         font-size: 0.75rem;
-    }
-
-    .site-btn-label-short {
-        display: inline;
-    }
-
-    .site-btn-label-long {
-        display: none;
     }
 }
 

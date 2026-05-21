@@ -40,10 +40,7 @@
                 <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M2 3h2l2 12h13l2-8H6M9 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>
                 @if ($cartCount > 0)<span class="site-cart-badge">{{ $cartCount }}</span>@endif
             </a>
-            <a href="{{ $adminLoginUrl }}" class="site-btn site-btn-primary site-btn-sm site-header-login">
-                <span class="site-btn-label-short">Login</span>
-                <span class="site-btn-label-long">Login to Admin Panel</span>
-            </a>
+            <a href="{{ $adminLoginUrl }}" class="site-btn site-btn-primary site-btn-sm site-header-login">Login</a>
             <button type="button" class="site-menu-toggle" data-site-menu-toggle aria-expanded="false" aria-label="Open menu">
                 <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/>
@@ -59,8 +56,6 @@
                 {{ $item['label'] }}
             </a>
         @endforeach
-        <a href="{{ $adminLoginUrl }}" class="site-btn site-btn-primary site-mobile-login">
-            Login to Admin Panel
-        </a>
+        <a href="{{ $adminLoginUrl }}" class="site-btn site-btn-primary site-mobile-login">Login</a>
     </nav>
 </header>
