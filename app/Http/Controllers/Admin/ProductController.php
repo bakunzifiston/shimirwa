@@ -9,6 +9,8 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -86,7 +88,7 @@ class ProductController extends Controller
         foreach ($request->input('remove_images', []) as $imageId) {
             $image = ProductImage::query()->where('product_id', $product->id)->find($imageId);
             if ($image) {
-                Storage::disk('public')->delete($image->path);
+                $this->deleteImageFile($image->path);
                 $image->delete();
             }
         }
@@ -106,7 +108,7 @@ class ProductController extends Controller
     public function destroy(Product $product): RedirectResponse
     {
         foreach ($product->images as $image) {
-            Storage::disk('public')->delete($image->path);
+            $this->deleteImageFile($image->path);
         }
 
         $product->delete();
@@ -146,7 +148,7 @@ class ProductController extends Controller
                 continue;
             }
 
-            $path = $file->store('products', 'public');
+            $path = $this->storeUploadedImage($file);
 
             if (! $path) {
                 continue;
@@ -181,5 +183,35 @@ class ProductController extends Controller
         }
 
         return array_values(array_filter($files, fn ($file) => $file && $file->isValid()));
+    }
+
+    private function storeUploadedImage(UploadedFile $file): ?string
+    {
+        $directory = public_path('uploads/products');
+
+        if (! File::isDirectory($directory)) {
+            File::makeDirectory($directory, 0755, true);
+        }
+
+        $extension = $file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg';
+        $filename = Str::uuid().'.'.strtolower($extension);
+
+        $file->move($directory, $filename);
+
+        return 'uploads/products/'.$filename;
+    }
+
+    private function deleteImageFile(string $path): void
+    {
+        if (str_starts_with($path, 'uploads/')) {
+            $fullPath = public_path($path);
+            if (File::isFile($fullPath)) {
+                File::delete($fullPath);
+            }
+
+            return;
+        }
+
+        Storage::disk('public')->delete($path);
     }
 }

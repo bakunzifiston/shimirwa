@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\MediaController;
 use App\Http\Controllers\Site\AboutController;
 use App\Http\Controllers\Site\CartController;
 use App\Http\Controllers\Site\CheckoutController;
@@ -7,6 +8,10 @@ use App\Http\Controllers\Site\ContactController;
 use App\Http\Controllers\Site\HomeController;
 use App\Http\Controllers\Site\ShopController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/media/{path}', [MediaController::class, 'show'])
+    ->where('path', '.+')
+    ->name('media.show');
 
 Route::get('/', HomeController::class)->name('home');
 Route::get('/about', AboutController::class)->name('about');
