@@ -2,136 +2,194 @@
 
 @section('title', 'Dashboard')
 @section('page_title', 'Dashboard')
-@section('page_subtitle', 'Overview of inventory, production, and sales')
+@section('page_subtitle', 'Key metrics and recent activity')
 
 @section('content')
-    <div class="admin-stats-grid mb-6">
-        @foreach ($stats as $stat)
-            <article class="admin-stat-card">
-                <span class="admin-stat-icon admin-stat-icon--{{ $stat['tone'] ?? 'primary' }}">
-                    <x-admin.icon :name="$stat['icon']" class="!h-6 !w-6" />
-                </span>
-                <div class="min-w-0">
-                    <p class="admin-stat-label">{{ $stat['label'] }}</p>
+    <div class="admin-dashboard">
+        <section class="admin-stats-grid admin-stats-grid--primary" aria-label="Key metrics">
+            @foreach ($primaryStats as $stat)
+                <article class="admin-stat-card admin-stat-card--primary">
+                    <div class="admin-stat-card-top">
+                        <p class="admin-stat-label">{{ $stat['label'] }}</p>
+                        <span class="admin-stat-icon admin-stat-icon--{{ $stat['tone'] ?? 'primary' }}">
+                            <x-admin.icon :name="$stat['icon']" class="!h-5 !w-5" />
+                        </span>
+                    </div>
                     <p class="admin-stat-value">{{ $stat['value'] }}</p>
-                    <p class="admin-stat-hint">{{ $stat['hint'] }}</p>
-                </div>
-            </article>
-        @endforeach
-    </div>
+                </article>
+            @endforeach
+        </section>
 
-    <div class="admin-dashboard-grid">
-        <div class="space-y-6">
-            <section class="admin-card">
+        <section class="admin-charts-grid" aria-label="Charts">
+            <article class="admin-card admin-chart-card">
                 <div class="admin-card-header">
-                    <h2 class="admin-card-title">Recent sales</h2>
-                    <a href="{{ route('admin.sales.index') }}" class="admin-btn admin-btn-ghost admin-btn-sm">View all</a>
-                </div>
-                <div class="admin-card-body !p-0">
-                    @if ($recentSales->isEmpty())
-                        <p class="px-5 py-8 text-center text-sm" style="color: var(--admin-text-muted)">No sales recorded yet.</p>
-                    @else
-                        <ul class="admin-activity-list px-5">
-                            @foreach ($recentSales as $sale)
-                                <li class="admin-activity-item">
-                                    <span class="admin-activity-dot"></span>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="font-medium">{{ $sale->item }}</p>
-                                        <p class="text-sm" style="color: var(--admin-text-muted)">
-                                            {{ $sale->client?->full_name ?? '—' }}
-                                            · {{ optional($sale->date)->format('M j, Y') }}
-                                        </p>
-                                    </div>
-                                    <span class="admin-badge admin-badge--primary shrink-0">
-                                        {{ number_format((float) $sale->total_price, 0) }} RWF
-                                    </span>
-                                </li>
-                            @endforeach
-                        </ul>
-                    @endif
-                </div>
-            </section>
-
-            <section class="admin-card">
-                <div class="admin-card-header">
-                    <h2 class="admin-card-title">Recent material reception</h2>
-                    <a href="{{ route('admin.raw-material-stocks.index') }}" class="admin-btn admin-btn-ghost admin-btn-sm">View all</a>
-                </div>
-                <div class="admin-card-body !p-0">
-                    @if ($recentStock->isEmpty())
-                        <p class="px-5 py-8 text-center text-sm" style="color: var(--admin-text-muted)">No stock entries yet.</p>
-                    @else
-                        <ul class="admin-activity-list px-5">
-                            @foreach ($recentStock as $stock)
-                                <li class="admin-activity-item">
-                                    <span class="admin-activity-dot" style="background: var(--admin-primary)"></span>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="font-medium">{{ $stock->item }}</p>
-                                        <p class="text-sm" style="color: var(--admin-text-muted)">
-                                            Batch {{ $stock->batch_number }}
-                                            · {{ $stock->client?->full_name ?? '—' }}
-                                        </p>
-                                    </div>
-                                    <span class="text-sm font-medium">{{ number_format($stock->quantity_in, 1) }} kg</span>
-                                </li>
-                            @endforeach
-                        </ul>
-                    @endif
-                </div>
-            </section>
-        </div>
-
-        <aside class="space-y-6">
-            <section class="admin-card">
-                <div class="admin-card-header">
-                    <h2 class="admin-card-title">Quick actions</h2>
-                </div>
-                <div class="admin-card-body">
-                    <nav class="admin-quick-actions">
-                        <a href="{{ route('admin.raw-material-stocks.create') }}" class="admin-quick-action">
-                            <x-admin.icon name="box" />
-                            Receive materials
-                        </a>
-                        <a href="{{ route('admin.roastings.create') }}" class="admin-quick-action">
-                            <x-admin.icon name="fire" />
-                            Record roasting
-                        </a>
-                        <a href="{{ route('admin.millings.create') }}" class="admin-quick-action">
-                            <x-admin.icon name="cog" />
-                            Record milling
-                        </a>
-                        <a href="{{ route('admin.emballages.create') }}" class="admin-quick-action">
-                            <x-admin.icon name="package" />
-                            Record packaging
-                        </a>
-                        <a href="{{ route('admin.sales.create') }}" class="admin-quick-action">
-                            <x-admin.icon name="cart" />
-                            Record sale
-                        </a>
-                        <a href="{{ route('admin.employees.create') }}" class="admin-quick-action">
-                            <x-admin.icon name="users" />
-                            Add employee
-                        </a>
-                    </nav>
-                </div>
-            </section>
-
-            <section class="admin-card">
-                <div class="admin-card-header">
-                    <h2 class="admin-card-title">Production pipeline</h2>
-                </div>
-                <div class="admin-card-body text-sm" style="color: var(--admin-text-muted)">
-                    <p class="mb-3">Track flow from reception through roasting, sorting, milling, packaging, and sales.</p>
-                    <div class="flex flex-wrap gap-2">
-                        <span class="admin-badge admin-badge--primary">Reception</span>
-                        <span class="admin-badge admin-badge--primary">Roasting</span>
-                        <span class="admin-badge admin-badge--primary">Sorting</span>
-                        <span class="admin-badge admin-badge--primary">Milling</span>
-                        <span class="admin-badge admin-badge--primary">Packaging</span>
-                        <span class="admin-badge admin-badge--success">Sales</span>
+                    <div>
+                        <h2 class="admin-card-title">Monthly revenue</h2>
+                        <p class="admin-chart-subtitle">IMS sales and shop orders — last 6 months</p>
                     </div>
                 </div>
-            </section>
-        </aside>
+                <div class="admin-card-body">
+                    <div class="admin-chart-wrap">
+                        <canvas id="admin-chart-bar" role="img" aria-label="Bar chart of monthly revenue"></canvas>
+                    </div>
+                </div>
+            </article>
+
+            <article class="admin-card admin-chart-card">
+                <div class="admin-card-header">
+                    <div>
+                        <h2 class="admin-card-title">Raw material intake</h2>
+                        <p class="admin-chart-subtitle">Net quantity received by material type</p>
+                    </div>
+                </div>
+                <div class="admin-card-body">
+                    @if (empty($chartData['pie']['labels']))
+                        <p class="admin-dashboard-empty">No raw material data yet.</p>
+                    @else
+                        <div class="admin-chart-wrap admin-chart-wrap--pie">
+                            <canvas id="admin-chart-pie" role="img" aria-label="Pie chart of raw material intake"></canvas>
+                        </div>
+                    @endif
+                </div>
+            </article>
+        </section>
+
+        <section class="admin-metric-strip" aria-label="Additional metrics">
+            @foreach ($secondaryStats as $metric)
+                <div class="admin-metric-strip-item">
+                    <span class="admin-metric-strip-label">{{ $metric['label'] }}</span>
+                    <span class="admin-metric-strip-value">{{ $metric['value'] }}</span>
+                </div>
+            @endforeach
+        </section>
+
+        <div class="admin-dashboard-grid">
+            <div class="admin-dashboard-main">
+                <section class="admin-card">
+                    <div class="admin-card-header">
+                        <h2 class="admin-card-title">Recent shop orders</h2>
+                        <a href="{{ route('admin.orders.index') }}" class="admin-btn admin-btn-ghost admin-btn-sm">View all</a>
+                    </div>
+                    <div class="admin-card-body admin-card-body--flush">
+                        @if ($recentOrders->isEmpty())
+                            <p class="admin-dashboard-empty">No shop orders yet.</p>
+                        @else
+                            <div class="admin-data-list">
+                                @foreach ($recentOrders as $order)
+                                    <a href="{{ route('admin.orders.show', $order) }}" class="admin-data-list-row">
+                                        <div class="admin-data-list-main">
+                                            <span class="admin-data-list-title">{{ $order->order_number }}</span>
+                                            <span class="admin-data-list-meta">
+                                                {{ $order->customer?->name ?? 'Guest' }}
+                                                · {{ $order->created_at->format('M j, Y') }}
+                                                · {{ \App\Models\Order::orderStatuses()[$order->order_status] ?? $order->order_status }}
+                                            </span>
+                                        </div>
+                                        <span class="admin-data-list-value">{{ number_format((float) $order->total, 0) }} RWF</span>
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </section>
+
+                <section class="admin-card">
+                    <div class="admin-card-header">
+                        <h2 class="admin-card-title">Recent sales</h2>
+                        <a href="{{ route('admin.sales.index') }}" class="admin-btn admin-btn-ghost admin-btn-sm">View all</a>
+                    </div>
+                    <div class="admin-card-body admin-card-body--flush">
+                        @if ($recentSales->isEmpty())
+                            <p class="admin-dashboard-empty">No sales recorded yet.</p>
+                        @else
+                            <div class="admin-data-list">
+                                @foreach ($recentSales as $sale)
+                                    <a href="{{ route('admin.sales.show', $sale) }}" class="admin-data-list-row">
+                                        <div class="admin-data-list-main">
+                                            <span class="admin-data-list-title">{{ $sale->item }}</span>
+                                            <span class="admin-data-list-meta">
+                                                {{ $sale->client?->full_name ?? '—' }}
+                                                · {{ optional($sale->date)->format('M j, Y') }}
+                                            </span>
+                                        </div>
+                                        <span class="admin-data-list-value">{{ number_format((float) $sale->total_price, 0) }} RWF</span>
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </section>
+
+                <section class="admin-card">
+                    <div class="admin-card-header">
+                        <h2 class="admin-card-title">Recent material reception</h2>
+                        <a href="{{ route('admin.raw-material-stocks.index') }}" class="admin-btn admin-btn-ghost admin-btn-sm">View all</a>
+                    </div>
+                    <div class="admin-card-body admin-card-body--flush">
+                        @if ($recentStock->isEmpty())
+                            <p class="admin-dashboard-empty">No stock entries yet.</p>
+                        @else
+                            <div class="admin-data-list">
+                                @foreach ($recentStock as $stock)
+                                    <a href="{{ route('admin.raw-material-stocks.show', $stock) }}" class="admin-data-list-row">
+                                        <div class="admin-data-list-main">
+                                            <span class="admin-data-list-title">{{ $stock->item }}</span>
+                                            <span class="admin-data-list-meta">
+                                                Batch {{ $stock->batch_number }}
+                                                · {{ $stock->client?->full_name ?? '—' }}
+                                            </span>
+                                        </div>
+                                        <span class="admin-data-list-value">{{ number_format($stock->quantity_in, 1) }} kg</span>
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </section>
+            </div>
+
+            <aside class="admin-dashboard-aside">
+                <section class="admin-card">
+                    <div class="admin-card-header">
+                        <h2 class="admin-card-title">Quick actions</h2>
+                    </div>
+                    <div class="admin-card-body">
+                        <nav class="admin-quick-actions admin-quick-actions--grid">
+                            <a href="{{ route('admin.products.create') }}" class="admin-quick-action">
+                                <x-admin.icon name="package" />
+                                Add product
+                            </a>
+                            <a href="{{ route('admin.orders.index') }}" class="admin-quick-action">
+                                <x-admin.icon name="cart" />
+                                View orders
+                            </a>
+                            <a href="{{ route('admin.raw-material-stocks.create') }}" class="admin-quick-action">
+                                <x-admin.icon name="box" />
+                                Receive materials
+                            </a>
+                            <a href="{{ route('admin.sales.create') }}" class="admin-quick-action">
+                                <x-admin.icon name="cart" />
+                                Record sale
+                            </a>
+                            <a href="{{ route('admin.emballages.create') }}" class="admin-quick-action">
+                                <x-admin.icon name="package" />
+                                Record packaging
+                            </a>
+                            <a href="{{ route('admin.employees.create') }}" class="admin-quick-action">
+                                <x-admin.icon name="users" />
+                                Add employee
+                            </a>
+                        </nav>
+                    </div>
+                </section>
+            </aside>
+        </div>
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        window.adminDashboardCharts = @json($chartData);
+    </script>
+    @vite('resources/js/admin-dashboard.js')
+@endpush

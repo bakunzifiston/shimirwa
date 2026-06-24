@@ -16,6 +16,8 @@ class Order extends Model
 
     public const PAYMENT_CANCELLED = 'cancelled';
 
+    public const PAYMENT_METHOD_COD = 'cash_on_delivery';
+
     public const STATUS_NEW = 'new';
 
     public const STATUS_PROCESSING = 'processing';
@@ -31,6 +33,7 @@ class Order extends Model
         'customer_id',
         'subtotal',
         'total',
+        'payment_method',
         'payment_status',
         'order_status',
         'idempotency_key',
@@ -67,6 +70,18 @@ class Order extends Model
             self::PAYMENT_PAID => 'Paid',
             self::PAYMENT_CANCELLED => 'Cancelled',
         ];
+    }
+
+    public static function paymentMethods(): array
+    {
+        return [
+            self::PAYMENT_METHOD_COD => 'Cash on delivery',
+        ];
+    }
+
+    public function paymentMethodLabel(): string
+    {
+        return self::paymentMethods()[$this->payment_method] ?? ucfirst(str_replace('_', ' ', (string) $this->payment_method));
     }
 
     public static function orderStatuses(): array

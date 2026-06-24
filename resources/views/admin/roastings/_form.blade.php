@@ -26,7 +26,7 @@
             <option value="">Select batch</option>
             @foreach ($rawStocks as $stock)
                 <option value="{{ $stock->id }}" @selected(old('raw_material_stock_id', $roasting->raw_material_stock_id) == $stock->id)>
-                    {{ $stock->item }} — {{ $stock->batch_number }} ({{ $stock->quantity_in }} kg)
+                    {{ $stock->item }} — {{ $stock->batch_number }} ({{ number_format($stock->remainingQuantity(), 2) }} kg available)
                 </option>
             @endforeach
         </select>
@@ -38,7 +38,7 @@
             <option value="">Select sorting batch</option>
             @foreach ($sortingStocks as $sorting)
                 <option value="{{ $sorting->id }}" @selected(old('sorting_id', $roasting->sorting_id) == $sorting->id)>
-                    {{ $sorting->rawMaterialStock?->item }} — {{ $sorting->rawMaterialStock?->batch_number }} ({{ $sorting->quantity_in }} kg)
+                    {{ $sorting->rawMaterialStock?->item }} — {{ $sorting->rawMaterialStock?->batch_number }} ({{ number_format($sorting->remainingUsable(), 2) }} kg available)
                 </option>
             @endforeach
         </select>
@@ -54,7 +54,7 @@
         <label class="admin-label" for="quantity_in">Quantity in (kg)</label>
         <input type="number" step="0.01" min="0.01" id="quantity_in" name="quantity_in" class="admin-input"
                value="{{ old('quantity_in', $roasting->quantity_in) }}" required>
-        <p class="mt-1 text-xs text-slate-500">Gross quantity taken from source (before loss).</p>
+        <p class="mt-1 text-xs text-slate-500">Full quantity taken from source.</p>
     </div>
 
     <div>
@@ -62,6 +62,17 @@
         <input type="number" step="0.01" min="0" id="loss" name="loss" class="admin-input"
                value="{{ old('loss', $roasting->loss ?? 0) }}" required>
     </div>
+
+    @if ($roasting->exists)
+        <div>
+            <span class="admin-label">Quantity out</span>
+            <p class="text-sm font-medium">{{ number_format($roasting->quantityOut(), 2) }} kg</p>
+        </div>
+        <div>
+            <span class="admin-label">Remaining</span>
+            <p class="text-sm font-medium">{{ number_format($roasting->remainingUsable(), 2) }} kg</p>
+        </div>
+    @endif
 
     <div>
         <label class="admin-label" for="chef_id">Chef</label>
@@ -125,6 +136,16 @@
     sourceType.addEventListener('change', syncSource);
     rawSelect.addEventListener('change', syncBatch);
     sortingSelect.addEventListener('change', syncBatch);
+
+    const roastingForm = form.closest('form');
+    if (roastingForm) {
+        roastingForm.addEventListener('submit', () => {
+            const isRaw = sourceType.value === 'raw';
+            rawSelect.disabled = !isRaw;
+            sortingSelect.disabled = isRaw;
+        });
+    }
+
     syncSource();
 })();
 </script>

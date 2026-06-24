@@ -59,8 +59,13 @@ class Sale extends Model
                         if ($qty > $emb->item) {
                             throw new Exception("Not enough stock in batch {$emb->batch}");
                         }
-                        $emb->decrement('item', $qty);
+                        self::adjustEmballageItem($emb, -$qty);
                     }
+                }
+
+                $returned = (int) ($sale->returned ?? 0);
+                if ($returned > 0) {
+                    self::applyReturnedDelta($sale, $returned);
                 }
             });
         });
@@ -88,11 +93,18 @@ class Sale extends Model
                             throw new Exception("Not enough stock in batch {$emb->batch}");
                         }
                         if ($diff > 0) {
-                            $emb->decrement('item', $diff);
+                            self::adjustEmballageItem($emb, -$diff);
                         }
                         if ($diff < 0) {
-                            $emb->increment('item', abs($diff));
+                            self::adjustEmballageItem($emb, abs($diff));
                         }
+                    }
+                }
+
+                if ($sale->wasChanged('returned')) {
+                    $delta = (int) $sale->returned - (int) $sale->getOriginal('returned');
+                    if ($delta !== 0) {
+                        self::applyReturnedDelta($sale, $delta);
                     }
                 }
             });
@@ -101,14 +113,117 @@ class Sale extends Model
         // Restore stock after delete
         static::deleted(function ($sale) {
             DB::transaction(function () use ($sale) {
-                foreach ($sale->batches ?? [] as $entry) {
-                    $emb = Emballage::lockForUpdate()->find($entry['emballage_id'] ?? null);
-                    $qty = isset($entry['quantity']) && is_numeric($entry['quantity']) ? (int)$entry['quantity'] : 0;
-                    if ($emb && $qty > 0) {
-                        $emb->increment('item', $qty);
+                foreach (self::netBatchRestoreMap($sale) as $emballageId => $qty) {
+                    if ($qty <= 0) {
+                        continue;
                     }
+
+                    Emballage::withoutEvents(function () use ($emballageId, $qty) {
+                        Emballage::lockForUpdate()->find($emballageId)?->increment('item', $qty);
+                    });
                 }
             });
+        });
+    }
+
+    /**
+     * Net units still deducted from each packaging batch after returns.
+     *
+     * @return array<int, int>
+     */
+    private static function netBatchRestoreMap(Sale $sale): array
+    {
+        $batches = $sale->batches ?? [];
+        $returned = min((int) ($sale->returned ?? 0), (int) collect($batches)->sum(fn ($b) => (int) ($b['quantity'] ?? 0)));
+        $remainingReturn = $returned;
+        $map = [];
+
+        foreach (array_reverse($batches) as $entry) {
+            $emballageId = (int) ($entry['emballage_id'] ?? 0);
+            $sold = (int) ($entry['quantity'] ?? 0);
+            if (! $emballageId || $sold <= 0) {
+                continue;
+            }
+
+            $returnFromBatch = min($remainingReturn, $sold);
+            $net = max($sold - $returnFromBatch, 0);
+            $map[$emballageId] = ($map[$emballageId] ?? 0) + $net;
+            $remainingReturn -= $returnFromBatch;
+        }
+
+        return $map;
+    }
+
+    /**
+     * Positive delta restores units to packaging batches; negative re-deducts.
+     */
+    private static function applyReturnedDelta(Sale $sale, int $delta): void
+    {
+        $batches = $sale->batches ?? [];
+
+        if ($delta > 0) {
+            $remaining = $delta;
+            foreach (array_reverse($batches) as $entry) {
+                $embId = (int) ($entry['emballage_id'] ?? 0);
+                $sold = (int) ($entry['quantity'] ?? 0);
+                if (! $embId || $sold <= 0) {
+                    continue;
+                }
+
+                $restore = min($remaining, $sold);
+                self::adjustEmballageItem(
+                    Emballage::query()->lockForUpdate()->find($embId),
+                    $restore
+                );
+                $remaining -= $restore;
+
+                if ($remaining <= 0) {
+                    break;
+                }
+            }
+
+            return;
+        }
+
+        $remaining = abs($delta);
+        foreach ($batches as $entry) {
+            $embId = (int) ($entry['emballage_id'] ?? 0);
+            $sold = (int) ($entry['quantity'] ?? 0);
+            if (! $embId || $sold <= 0) {
+                continue;
+            }
+
+            $emb = Emballage::query()->lockForUpdate()->find($embId);
+            if (! $emb) {
+                continue;
+            }
+
+            $deduct = min($remaining, $sold);
+            if ($deduct > $emb->item) {
+                throw new Exception("Cannot reduce returned count: not enough stock in batch {$emb->batch}.");
+            }
+
+            self::adjustEmballageItem($emb, -$deduct);
+            $remaining -= $deduct;
+
+            if ($remaining <= 0) {
+                break;
+            }
+        }
+    }
+
+    private static function adjustEmballageItem(?Emballage $emballage, int $delta): void
+    {
+        if (! $emballage || $delta === 0) {
+            return;
+        }
+
+        Emballage::withoutEvents(function () use ($emballage, $delta) {
+            if ($delta > 0) {
+                $emballage->increment('item', $delta);
+            } else {
+                $emballage->decrement('item', abs($delta));
+            }
         });
     }
 }

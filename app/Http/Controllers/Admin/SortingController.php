@@ -28,7 +28,31 @@ class SortingController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.sortings.index', compact('sortings', 'search'));
+        $summaryStats = [
+            [
+                'label' => 'Total batches',
+                'value' => Sorting::count(),
+                'icon' => 'box',
+            ],
+            [
+                'label' => 'In stock',
+                'value' => Sorting::where('quantity_remaining', '>=', 0.01)->count(),
+                'icon' => 'chart',
+                'valueAccent' => true,
+            ],
+            [
+                'label' => 'Kg processed',
+                'value' => number_format((float) Sorting::sum('quantity_in'), 0).' kg',
+                'icon' => 'filter',
+            ],
+            [
+                'label' => 'Kg remaining',
+                'value' => number_format((float) Sorting::sum('quantity_remaining'), 0).' kg',
+                'icon' => 'package',
+            ],
+        ];
+
+        return view('admin.sortings.index', compact('sortings', 'search', 'summaryStats'));
     }
 
     public function create(): View
@@ -42,7 +66,11 @@ class SortingController extends Controller
 
     public function store(StoreSortingRequest $request): RedirectResponse
     {
-        Sorting::create($request->validated());
+        try {
+            Sorting::create($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sortings.index')->with('success', 'Sorting recorded.');
     }
@@ -58,30 +86,41 @@ class SortingController extends Controller
     {
         return view('admin.sortings.edit', [
             'sorting' => $sorting,
-            'stocks' => $this->availableStocks(),
+            'stocks' => $this->availableStocks($sorting->raw_material_stock_id),
             'employees' => Employee::orderBy('full_name')->get(),
         ]);
     }
 
     public function update(UpdateSortingRequest $request, Sorting $sorting): RedirectResponse
     {
-        $sorting->update($request->validated());
+        try {
+            $sorting->update($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sortings.show', $sorting)->with('success', 'Sorting updated.');
     }
 
     public function destroy(Sorting $sorting): RedirectResponse
     {
-        $sorting->delete();
+        try {
+            $sorting->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sortings.index')->with('success', 'Sorting deleted.');
     }
 
-    protected function availableStocks()
+    protected function availableStocks(?int $includeId = null)
     {
         return RawMaterialStock::query()
-            ->where('quantity_in', '>', 0)
+            ->availableForSorting($includeId)
             ->orderByDesc('date')
-            ->get();
+            ->get()
+            ->filter(fn (RawMaterialStock $stock) => $stock->hasAvailableStock()
+                || ($includeId && (int) $stock->id === (int) $includeId))
+            ->values();
     }
 }

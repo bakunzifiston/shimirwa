@@ -11,6 +11,7 @@ export default defineConfig({
                 'resources/css/public.css',
                 'resources/js/app.js',
                 'resources/js/public.js',
+                'resources/js/admin-dashboard.js',
             ],
             refresh: true,
         }),

@@ -28,6 +28,22 @@
                     <x-site.input label="Email (optional)" name="email" type="email" value="{{ old('email') }}" />
                     <x-site.input label="Delivery address" name="address" type="textarea" :required="true" :value="old('address')" />
                     <x-site.input label="Order notes (optional)" name="notes" type="textarea" :value="old('notes')" />
+
+                    <h2>Payment</h2>
+                    <div class="site-payment-options">
+                        <label class="site-payment-option">
+                            <input type="radio" name="payment_method" value="cash_on_delivery"
+                                   @checked(old('payment_method', 'cash_on_delivery') === 'cash_on_delivery') required>
+                            <span class="site-payment-option-body">
+                                <strong>Cash on delivery</strong>
+                                <span>Pay with cash when your order is delivered.</span>
+                            </span>
+                        </label>
+                    </div>
+                    @error('payment_method')
+                        <p class="site-field-error">{{ $message }}</p>
+                    @enderror
+
                     <x-site.button type="submit" size="site-btn-lg" id="checkout-submit">Place order</x-site.button>
                 </form>
 

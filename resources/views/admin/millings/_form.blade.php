@@ -3,10 +3,10 @@
     if (empty($items)) {
         $items = [['type' => '', 'stock_id' => '', 'quantity' => '']];
     }
-    $roastingOpts = $roastingOptions->map(fn ($r) => ['id' => $r->id, 'label' => $r->batch . ' (' . $r->quantity_in . ' kg)']);
+    $roastingOpts = $roastingOptions->map(fn ($r) => ['id' => $r->id, 'label' => $r->batch . ' (' . number_format($r->remainingUsable(), 2) . ' kg available)']);
     $sortingOpts = $sortingOptions->map(fn ($s) => [
         'id' => $s->id,
-        'label' => ($s->rawMaterialStock?->item ?? 'Item') . ' — ' . ($s->rawMaterialStock?->batch_number ?? '') . ' (' . $s->quantity_in . ' kg)',
+        'label' => ($s->rawMaterialStock?->item ?? 'Item') . ' — ' . ($s->rawMaterialStock?->batch_number ?? '') . ' (' . number_format($s->remainingUsable(), 2) . ' kg available)',
     ]);
 @endphp
 
@@ -43,12 +43,12 @@
         </div>
         <div>
             <label class="admin-label" for="total_mixed_quantity">Total mixed (kg)</label>
-            <input type="number" step="0.01" id="total_mixed_quantity" name="total_mixed_quantity" class="admin-input bg-slate-100" readonly
+            <input type="number" step="0.01" id="total_mixed_quantity" class="admin-input bg-slate-100" readonly
                    value="{{ old('total_mixed_quantity', $milling->total_mixed_quantity ?? 0) }}">
         </div>
         <div>
             <label class="admin-label" for="output_flour">Output flour (kg)</label>
-            <input type="number" step="0.01" id="output_flour" name="output_flour" class="admin-input bg-slate-100" readonly
+            <input type="number" step="0.01" id="output_flour" class="admin-input bg-slate-100" readonly
                    value="{{ old('output_flour', $milling->output_flour ?? 0) }}">
         </div>
     </div>

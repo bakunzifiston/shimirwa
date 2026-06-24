@@ -27,7 +27,31 @@ class SaleController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.sales.index', compact('sales', 'search'));
+        $summaryStats = [
+            [
+                'label' => 'Total sales',
+                'value' => Sale::count(),
+                'icon' => 'box',
+            ],
+            [
+                'label' => 'Revenue',
+                'value' => number_format((float) Sale::sum('total_price'), 0).' RWF',
+                'icon' => 'chart',
+                'valueAccent' => true,
+            ],
+            [
+                'label' => 'Units sold',
+                'value' => number_format((float) Sale::sum('quantity'), 0),
+                'icon' => 'cart',
+            ],
+            [
+                'label' => 'Returns',
+                'value' => number_format((int) Sale::sum('returned')),
+                'icon' => 'alert',
+            ],
+        ];
+
+        return view('admin.sales.index', compact('sales', 'search', 'summaryStats'));
     }
 
     public function create(): View
@@ -37,7 +61,11 @@ class SaleController extends Controller
 
     public function store(StoreSaleRequest $request): RedirectResponse
     {
-        Sale::create($request->validated());
+        try {
+            Sale::create($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sales.index')->with('success', 'Sale recorded.');
     }
@@ -56,26 +84,45 @@ class SaleController extends Controller
 
     public function update(UpdateSaleRequest $request, Sale $sale): RedirectResponse
     {
-        $sale->update($request->validated());
+        try {
+            $sale->update($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sales.show', $sale)->with('success', 'Sale updated.');
     }
 
     public function destroy(Sale $sale): RedirectResponse
     {
-        $sale->delete();
+        try {
+            $sale->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sales.index')->with('success', 'Sale deleted.');
     }
 
     protected function formData(Sale $sale): array
     {
+        $includeEmballageIds = collect($sale->batches ?? [])
+            ->pluck('emballage_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
         return [
             'sale' => $sale,
             'clients' => Client::where('role', 'client')->orderBy('full_name')->get(),
             'employees' => Employee::orderBy('full_name')->get(),
             'emballages' => Emballage::with('milling')
-                ->where('item', '>', 0)
+                ->where(function ($query) use ($includeEmballageIds) {
+                    $query->where('item', '>', 0);
+                    if ($includeEmballageIds !== []) {
+                        $query->orWhereIn('id', $includeEmballageIds);
+                    }
+                })
                 ->orderByDesc('date')
                 ->get(),
         ];

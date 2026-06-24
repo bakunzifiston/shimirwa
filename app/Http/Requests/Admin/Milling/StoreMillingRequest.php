@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Admin\Milling;
 
+use App\Support\Inventory\FormRequestStockValidator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class StoreMillingRequest extends FormRequest
 {
@@ -23,5 +25,31 @@ class StoreMillingRequest extends FormRequest
             'items.*.stock_id' => ['required', 'integer'],
             'items.*.quantity' => ['required', 'numeric', 'min:0.01'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator) {
+            $items = $this->input('items', []);
+            $existing = $this->route('milling');
+            $oldItems = $existing ? ($existing->items ?? []) : [];
+
+            foreach (FormRequestStockValidator::millingItemReferences($items) as $field => $message) {
+                $validator->errors()->add($field, $message);
+            }
+
+            $lossMessage = FormRequestStockValidator::millingLoss((float) $this->input('loss', 0), $items);
+            if ($lossMessage) {
+                $validator->errors()->add('loss', $lossMessage);
+            }
+
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            foreach (FormRequestStockValidator::millingItems($items, $oldItems) as $field => $message) {
+                $validator->errors()->add($field, $message);
+            }
+        });
     }
 }

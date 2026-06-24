@@ -16,7 +16,7 @@
             <div><dt class="text-sm text-slate-500">Item</dt><dd class="font-medium">{{ $stock->item }}</dd></div>
             <div><dt class="text-sm text-slate-500">Received</dt><dd class="font-medium">{{ number_format($stock->received, 2) }}</dd></div>
             <div><dt class="text-sm text-slate-500">Rejected</dt><dd class="font-medium">{{ number_format($stock->rejected, 2) }}</dd></div>
-            <div><dt class="text-sm text-slate-500">Net quantity in</dt><dd class="font-medium text-[#10498C]">{{ number_format($stock->quantity_in, 2) }}</dd></div>
+            <div><dt class="text-sm text-slate-500">Remaining quantity</dt><dd class="font-medium text-[#10498C]">{{ number_format($stock->remainingQuantity(), 2) }} kg</dd></div>
             <div><dt class="text-sm text-slate-500">Batch number</dt><dd class="font-medium">{{ $stock->batch_number }}</dd></div>
             <div><dt class="text-sm text-slate-500">Employee</dt><dd class="font-medium">{{ $stock->employee?->full_name }}</dd></div>
             @if ($stock->comment)

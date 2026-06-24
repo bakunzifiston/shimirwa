@@ -27,7 +27,31 @@ class EmballageController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.emballages.index', compact('emballages', 'search'));
+        $summaryStats = [
+            [
+                'label' => 'Total batches',
+                'value' => Emballage::count(),
+                'icon' => 'box',
+            ],
+            [
+                'label' => 'In stock',
+                'value' => Emballage::where('item', '>=', 1)->count(),
+                'icon' => 'chart',
+                'valueAccent' => true,
+            ],
+            [
+                'label' => 'Units available',
+                'value' => number_format((int) Emballage::sum('item')),
+                'icon' => 'package',
+            ],
+            [
+                'label' => 'Flour packaged',
+                'value' => number_format((float) Emballage::sum('quantity'), 0).' kg',
+                'icon' => 'cart',
+            ],
+        ];
+
+        return view('admin.emballages.index', compact('emballages', 'search', 'summaryStats'));
     }
 
     public function create(): View
@@ -37,7 +61,11 @@ class EmballageController extends Controller
 
     public function store(StoreEmballageRequest $request): RedirectResponse
     {
-        Emballage::create($request->validated());
+        try {
+            Emballage::create($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.emballages.index')->with('success', 'Packaging recorded.');
     }
@@ -56,14 +84,22 @@ class EmballageController extends Controller
 
     public function update(UpdateEmballageRequest $request, Emballage $emballage): RedirectResponse
     {
-        $emballage->update($request->validated());
+        try {
+            $emballage->update($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.emballages.show', $emballage)->with('success', 'Packaging updated.');
     }
 
     public function destroy(Emballage $emballage): RedirectResponse
     {
-        $emballage->delete();
+        try {
+            $emballage->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.emballages.index')->with('success', 'Packaging deleted.');
     }
@@ -72,8 +108,25 @@ class EmballageController extends Controller
     {
         return [
             'emballage' => $emballage,
-            'packagingStocks' => RawMaterialStock::packagingStaff()->where('quantity_in', '>', 0)->orderByDesc('date')->get(),
-            'millings' => Milling::where('output_flour', '>', 0)->orderByDesc('date')->get(),
+            'packagingStocks' => RawMaterialStock::query()
+                ->packagingStaff()
+                ->where(function ($query) use ($emballage) {
+                    $query->where('quantity_in', '>', 0);
+                    if ($emballage->raw_material_stock_id) {
+                        $query->orWhere('id', $emballage->raw_material_stock_id);
+                    }
+                })
+                ->orderByDesc('date')
+                ->get(),
+            'millings' => Milling::query()
+                ->where(function ($query) use ($emballage) {
+                    $query->where('output_flour', '>', 0);
+                    if ($emballage->milling_id) {
+                        $query->orWhere('id', $emballage->milling_id);
+                    }
+                })
+                ->orderByDesc('date')
+                ->get(),
             'employees' => Employee::orderBy('full_name')->get(),
             'packagingTypes' => [
                 'box' => 'Box (12 kg flour per box)',

@@ -1442,6 +1442,53 @@ a:hover {
     font-size: 1.125rem;
 }
 
+.site-checkout-form h2:not(:first-of-type) {
+    margin-top: 1.5rem;
+}
+
+.site-payment-options {
+    display: grid;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.site-payment-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--site-border);
+    border-radius: var(--site-radius);
+    background: var(--site-bg);
+    cursor: pointer;
+}
+
+.site-payment-option:has(input:checked) {
+    border-color: var(--site-primary);
+    box-shadow: 0 0 0 1px var(--site-primary);
+}
+
+.site-payment-option input {
+    margin-top: 0.2rem;
+    accent-color: var(--site-primary);
+}
+
+.site-payment-option-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.9375rem;
+}
+
+.site-payment-option-body strong {
+    color: var(--site-text);
+}
+
+.site-payment-option-body span:last-child {
+    color: var(--site-text-muted);
+    font-size: 0.875rem;
+}
+
 .site-cart-summary-row {
     display: flex;
     justify-content: space-between;

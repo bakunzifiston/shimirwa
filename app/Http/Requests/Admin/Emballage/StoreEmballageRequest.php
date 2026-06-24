@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Admin\Emballage;
 
+use App\Support\Inventory\FormRequestStockValidator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreEmballageRequest extends FormRequest
 {
@@ -30,5 +32,19 @@ class StoreEmballageRequest extends FormRequest
             'comment' => ['nullable', 'string', 'max:500'],
             'employee_id' => ['required', 'exists:employees,id'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator) {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            $existing = $this->route('emballage');
+            foreach (FormRequestStockValidator::emballage($this->all(), $existing) as $field => $message) {
+                $validator->errors()->add($field, $message);
+            }
+        });
     }
 }

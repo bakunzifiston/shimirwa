@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Inventory\InventoryReferences;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
@@ -73,7 +74,7 @@ class Emballage extends Model
     }
 
     /**
-     * Filament resource forms use state path `data`, so errors attach to the milling field in the UI.
+     * Validation errors for milling flour availability attach to milling_id in forms.
      */
     protected static function failMillingFlourAvailability(string $message): never
     {
@@ -178,6 +179,22 @@ class Emballage extends Model
 
         // ------------------- UPDATE -------------------
         static::updating(function ($emballage) {
+            if (InventoryReferences::emballageReferencedInSale((int) $emballage->id)) {
+                foreach ([
+                    'item',
+                    'packaging_type',
+                    'quantity',
+                    'raw_material_stock_id',
+                    'envelope_stock_id',
+                    'milling_id',
+                    'damaged',
+                ] as $field) {
+                    if ($emballage->isDirty($field)) {
+                        throw new \Exception('Cannot change packaging quantities or materials: this batch is referenced by sales records.');
+                    }
+                }
+            }
+
             $item = (float) ($emballage->item ?? 0);
             $type = strtolower(trim($emballage->packaging_type ?? '1kg'));
 
@@ -268,6 +285,12 @@ class Emballage extends Model
         });
 
         // ------------------- DELETE -------------------
+        static::deleting(function ($emballage) {
+            if (InventoryReferences::emballageReferencedInSale((int) $emballage->id)) {
+                throw new \Exception('Cannot delete packaging: it is referenced by sales records.');
+            }
+        });
+
         static::deleted(function ($emballage) {
             $item = (float) ($emballage->item ?? 0);
             $type = strtolower(trim($emballage->packaging_type ?? '1kg'));

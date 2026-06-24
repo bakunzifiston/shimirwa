@@ -37,7 +37,41 @@ class OrderController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.orders.index', compact('orders', 'search', 'orderStatus', 'paymentStatus'));
+        $summaryStats = [
+            [
+                'label' => 'Total orders',
+                'value' => Order::count(),
+                'icon' => 'box',
+            ],
+            [
+                'label' => 'Revenue',
+                'value' => number_format((float) Order::query()
+                    ->where('payment_status', '!=', Order::PAYMENT_CANCELLED)
+                    ->sum('total'), 0).' RWF',
+                'icon' => 'chart',
+                'valueAccent' => true,
+            ],
+            [
+                'label' => 'Pending payment',
+                'value' => Order::where('payment_status', Order::PAYMENT_PENDING)->count(),
+                'icon' => 'cart',
+            ],
+            [
+                'label' => 'Completed',
+                'value' => Order::where('order_status', Order::STATUS_COMPLETED)->count(),
+                'icon' => 'truck',
+            ],
+        ];
+
+        return view('admin.orders.index', [
+            'orders' => $orders,
+            'search' => $search,
+            'orderStatus' => $orderStatus,
+            'paymentStatus' => $paymentStatus,
+            'summaryStats' => $summaryStats,
+            'orderStatuses' => Order::orderStatuses(),
+            'paymentStatuses' => Order::paymentStatuses(),
+        ]);
     }
 
     public function show(Order $order): View

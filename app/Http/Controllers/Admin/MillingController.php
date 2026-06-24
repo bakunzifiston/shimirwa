@@ -26,7 +26,31 @@ class MillingController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.millings.index', compact('millings', 'search'));
+        $summaryStats = [
+            [
+                'label' => 'Total batches',
+                'value' => Milling::count(),
+                'icon' => 'box',
+            ],
+            [
+                'label' => 'Flour output',
+                'value' => number_format((float) Milling::sum('output_flour'), 0).' kg',
+                'icon' => 'chart',
+                'valueAccent' => true,
+            ],
+            [
+                'label' => 'Kg mixed',
+                'value' => number_format((float) Milling::sum('total_mixed_quantity'), 0).' kg',
+                'icon' => 'cog',
+            ],
+            [
+                'label' => 'Total loss',
+                'value' => number_format((float) Milling::sum('loss'), 0).' kg',
+                'icon' => 'alert',
+            ],
+        ];
+
+        return view('admin.millings.index', compact('millings', 'search', 'summaryStats'));
     }
 
     public function create(): View
@@ -36,7 +60,11 @@ class MillingController extends Controller
 
     public function store(StoreMillingRequest $request): RedirectResponse
     {
-        Milling::create($request->validated());
+        try {
+            Milling::create($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.millings.index')->with('success', 'Milling recorded.');
     }
@@ -55,25 +83,74 @@ class MillingController extends Controller
 
     public function update(UpdateMillingRequest $request, Milling $milling): RedirectResponse
     {
-        $milling->update($request->validated());
+        try {
+            $milling->update($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['update' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.millings.show', $milling)->with('success', 'Milling updated.');
     }
 
     public function destroy(Milling $milling): RedirectResponse
     {
-        $milling->delete();
+        try {
+            $milling->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.millings.index')->with('success', 'Milling deleted.');
     }
 
     protected function formData(Milling $milling): array
     {
+        $selectedRoastingIds = collect($milling->items ?? [])
+            ->filter(fn ($item) => in_array($item['type'] ?? '', ['soy', 'maize'], true))
+            ->pluck('stock_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $selectedSortingIds = collect($milling->items ?? [])
+            ->reject(fn ($item) => in_array($item['type'] ?? '', ['soy', 'maize'], true))
+            ->pluck('stock_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
         return [
             'milling' => $milling,
             'employees' => Employee::orderBy('full_name')->get(),
-            'roastingOptions' => Roasting::where('quantity_in', '>', 0)->orderByDesc('date')->get(),
-            'sortingOptions' => Sorting::with('rawMaterialStock')->where('quantity_in', '>', 0)->orderByDesc('date')->get(),
+            'roastingOptions' => $this->availableRoastings($selectedRoastingIds),
+            'sortingOptions' => $this->availableSortings($selectedSortingIds),
         ];
+    }
+
+    protected function availableRoastings(array $includeIds = [])
+    {
+        return Roasting::query()
+            ->where(function ($query) use ($includeIds) {
+                $query->where('quantity_remaining', '>', 0);
+                if ($includeIds !== []) {
+                    $query->orWhereIn('id', $includeIds);
+                }
+            })
+            ->orderByDesc('date')
+            ->get();
+    }
+
+    protected function availableSortings(array $includeIds = [])
+    {
+        return Sorting::query()
+            ->with('rawMaterialStock')
+            ->where(function ($query) use ($includeIds) {
+                $query->where('quantity_remaining', '>', 0);
+                if ($includeIds !== []) {
+                    $query->orWhereIn('id', $includeIds);
+                }
+            })
+            ->orderByDesc('date')
+            ->get();
     }
 }

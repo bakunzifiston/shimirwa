@@ -7,16 +7,24 @@
 @section('content')
     <x-admin.listing :paginator="$products" :show-search="false">
         <x-slot:toolbar>
-            <form method="GET" class="flex flex-1 flex-wrap items-center gap-2">
+            <form method="GET" class="admin-filter-bar">
                 <div class="admin-search-wrap">
-                    <input type="search" name="search" value="{{ $search }}" placeholder="Search by name…" class="admin-input">
+                    <x-admin.icon name="search" class="!absolute !left-3 !top-1/2 !h-4 !w-4 !-translate-y-1/2" style="color: var(--admin-text-subtle)" />
+                    <input type="search" name="search" value="{{ $search }}" placeholder="Search products…" class="admin-input">
                 </div>
-                <select name="status" class="admin-input w-auto min-w-[8rem]">
-                    <option value="">All statuses</option>
-                    <option value="active" @selected($status === 'active')>Active</option>
-                    <option value="inactive" @selected($status === 'inactive')>Inactive</option>
-                </select>
-                <button type="submit" class="admin-btn admin-btn-secondary admin-btn-sm">Filter</button>
+                <div class="admin-filter-bar__filters">
+                    <select name="status" class="admin-input" aria-label="Product status">
+                        <option value="">All statuses</option>
+                        <option value="active" @selected($status === 'active')>Active</option>
+                        <option value="inactive" @selected($status === 'inactive')>Inactive</option>
+                    </select>
+                </div>
+                <div class="admin-filter-bar__actions">
+                    <button type="submit" class="admin-btn admin-btn-secondary admin-btn-sm">Apply</button>
+                    @if ($search || $status)
+                        <a href="{{ route('admin.products.index') }}" class="admin-btn admin-btn-ghost admin-btn-sm">Clear</a>
+                    @endif
+                </div>
             </form>
         </x-slot:toolbar>
         <x-slot:actions>

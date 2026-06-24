@@ -34,11 +34,36 @@ class RawMaterialStockController extends Controller
             ->paginate(15)
             ->withQueryString();
 
+        $summaryStats = [
+            [
+                'label' => 'Total batches',
+                'value' => RawMaterialStock::count(),
+                'icon' => 'box',
+            ],
+            [
+                'label' => 'In stock',
+                'value' => RawMaterialStock::where('quantity_in', '>=', 0.01)->count(),
+                'icon' => 'chart',
+                'valueAccent' => true,
+            ],
+            [
+                'label' => 'Raw material',
+                'value' => RawMaterialStock::rawMaterialKg()->count(),
+                'icon' => 'filter',
+            ],
+            [
+                'label' => 'Kg remaining',
+                'value' => number_format((float) RawMaterialStock::rawMaterialKg()->sum('quantity_in'), 0).' kg',
+                'icon' => 'package',
+            ],
+        ];
+
         return view('admin.raw-material-stocks.index', [
             'stocks' => $stocks,
             'search' => $search,
             'type' => $type,
             'types' => config('raw_material_stock.types'),
+            'summaryStats' => $summaryStats,
         ]);
     }
 
@@ -87,7 +112,11 @@ class RawMaterialStockController extends Controller
 
     public function destroy(RawMaterialStock $rawMaterialStock): RedirectResponse
     {
-        $rawMaterialStock->delete();
+        try {
+            $rawMaterialStock->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()
             ->route('admin.raw-material-stocks.index')
