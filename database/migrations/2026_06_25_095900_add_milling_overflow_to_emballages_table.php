@@ -12,8 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('emballages', function (Blueprint $table) {
-            // JSON array of {milling_id, quantity} for overflow draws beyond the primary batch
-            $table->json('milling_overflow')->nullable()->after('milling_id');
+            if (! Schema::hasColumn('emballages', 'milling_overflow')) {
+                $table->json('milling_overflow')->nullable()->after('milling_id');
+            }
         });
     }
 

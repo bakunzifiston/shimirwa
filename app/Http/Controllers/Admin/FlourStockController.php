@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Emballage;
 use App\Models\Milling;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class FlourStockController extends Controller
@@ -25,23 +26,18 @@ class FlourStockController extends Controller
 
         // Packaging records
         $search = $request->string('search')->trim()->toString();
-        $packagings = Emballage::with(['milling', 'employee', 'packagingCatalog'])
+        $packagings = Emballage::query()
+            ->with(array_filter([
+                'milling',
+                'employee',
+                Schema::hasColumn('emballages', 'packaging_catalog_id') ? 'packagingCatalog' : null,
+            ]))
             ->when($search, fn ($q) => $q->where('packaging_batch_id', 'like', "%{$search}%"))
             ->orderByDesc('date')
             ->paginate(20)
             ->withQueryString();
 
-        // Totals grouped by packaging type
-        $packagingSummary = Emballage::with('packagingCatalog')
-            ->selectRaw('packaging_catalog_id, packaging_type, SUM(item) as total_units, SUM(quantity) as total_flour, SUM(damaged) as total_damaged')
-            ->groupBy('packaging_catalog_id', 'packaging_type')
-            ->get()
-            ->map(fn ($row) => [
-                'name'          => $row->packagingCatalog?->name ?? ($row->packaging_type ?? 'Unknown'),
-                'total_units'   => (int) $row->total_units,
-                'total_flour'   => (float) $row->total_flour,
-                'total_damaged' => (int) $row->total_damaged,
-            ]);
+        $packagingSummary = $this->packagingSummary();
 
         $pageStats = [
             ['label' => 'Flour available', 'value' => number_format($totalFlour, 1).' kg',  'icon' => 'scale',   'color' => 'blue'],
@@ -53,5 +49,35 @@ class FlourStockController extends Controller
         return view('admin.flour-stock.index', compact(
             'tab', 'flourBatches', 'totalFlour', 'packagings', 'packagingSummary', 'search', 'pageStats'
         ));
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array{name: string, total_units: int, total_flour: float, total_damaged: int}>
+     */
+    private function packagingSummary()
+    {
+        if (Schema::hasColumn('emballages', 'packaging_catalog_id')) {
+            return Emballage::with('packagingCatalog')
+                ->selectRaw('packaging_catalog_id, packaging_type, SUM(item) as total_units, SUM(quantity) as total_flour, SUM(damaged) as total_damaged')
+                ->groupBy('packaging_catalog_id', 'packaging_type')
+                ->get()
+                ->map(fn ($row) => [
+                    'name' => $row->packagingCatalog?->name ?? ($row->packaging_type ?? 'Unknown'),
+                    'total_units' => (int) $row->total_units,
+                    'total_flour' => (float) $row->total_flour,
+                    'total_damaged' => (int) $row->total_damaged,
+                ]);
+        }
+
+        return Emballage::query()
+            ->selectRaw('packaging_type, SUM(item) as total_units, SUM(quantity) as total_flour, SUM(damaged) as total_damaged')
+            ->groupBy('packaging_type')
+            ->get()
+            ->map(fn ($row) => [
+                'name' => strtoupper((string) ($row->packaging_type ?: 'Unknown')),
+                'total_units' => (int) $row->total_units,
+                'total_flour' => (float) $row->total_flour,
+                'total_damaged' => (int) $row->total_damaged,
+            ]);
     }
 }

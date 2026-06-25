@@ -99,6 +99,7 @@ class Milling extends Model
     protected static function booted()
     {
         static::creating(function ($milling) {
+            $items = self::normalizeMillingItems($milling->items);
             $total = 0;
             foreach ($milling->items ?? [] as $item) {
                 $qty    = floatval($item['quantity'] ?? 0);
@@ -110,8 +111,16 @@ class Milling extends Model
                 if ($avail < $qty) throw new \Exception("Not enough stock in batch. Available: {$avail} kg.");
                 $total += $qty;
             }
+
+            $loss = (float) ($milling->loss ?? 0);
+            if ($loss > $total) {
+                throw new \Exception('Loss cannot exceed mixed quantity.');
+            }
+
             $milling->total_mixed_quantity = $total;
-            if (($milling->loss ?? 0) > $total) throw new \Exception("Loss cannot exceed mixed quantity.");
+            if ($milling->output_flour === null) {
+                $milling->output_flour = max($total - $loss, 0);
+            }
         });
 
         static::created(function ($milling) {
@@ -129,11 +138,23 @@ class Milling extends Model
         });
 
         static::updating(function ($milling) {
-            if (!$milling->isDirty('items') && !$milling->isDirty('loss')) return;
-            $total = array_sum(array_column($milling->items ?? [], 'quantity'));
-            $loss  = floatval($milling->loss ?? 0);
-            if ($loss > $total) throw new \Exception("Loss cannot exceed total mixed quantity ({$total} kg).");
+            if (! $milling->isDirty('items') && ! $milling->isDirty('loss')) {
+                return;
+            }
+
+            $items = self::normalizeMillingItems($milling->items);
+            $total = array_sum(array_map(fn ($item) => (float) ($item['quantity'] ?? 0), $items));
+            $loss = (float) ($milling->loss ?? 0);
+
+            if ($loss > $total) {
+                throw new \Exception("Loss cannot exceed total mixed quantity ({$total} kg).");
+            }
+
             $milling->total_mixed_quantity = $total;
+
+            if ($milling->isDirty('loss') || $milling->isDirty('items')) {
+                $milling->output_flour = max($total - $loss, 0);
+            }
         });
 
         static::updated(function ($milling) {
@@ -162,8 +183,11 @@ class Milling extends Model
         $buildMap = function (array $items): array {
             $map = [];
             foreach ($items as $item) {
-                $key = ($item['type'] ?? '').':'.($item['stock_id'] ?? '');
-                $map[$key] = ($map[$key] ?? 0) + floatval($item['quantity'] ?? 0);
+                $key = self::itemKey($item);
+                if (! str_contains($key, ':') || str_ends_with($key, ':')) {
+                    continue;
+                }
+                $map[$key] = ($map[$key] ?? 0) + (float) ($item['quantity'] ?? 0);
             }
 
             return $map;
@@ -174,8 +198,8 @@ class Milling extends Model
         $allKeys = array_unique(array_merge(array_keys($oldMap), array_keys($newMap)));
 
         foreach ($allKeys as $key) {
-            [$type, $stockId] = explode(':', $key, 2);
-            if (! $type || ! $stockId) {
+            [$source, $stockId] = explode(':', $key, 2);
+            if (! $source || ! $stockId) {
                 continue;
             }
 
@@ -184,10 +208,19 @@ class Milling extends Model
                 continue;
             }
 
-            $batch = self::resolveBatch($type, (int) $stockId);
+            $batch = self::resolveBatchFromItem([
+                'source' => $source,
+                'stock_id' => (int) $stockId,
+            ], lock: true);
+
+            if (! $batch) {
+                throw new \Exception('Selected batch does not exist.');
+            }
 
             if ($diff > 0 && $batch->remainingUsable() < $diff) {
-                $label = $batch instanceof Roasting ? $batch->batch : ($batch->rawMaterialStock?->batch_number ?? "#{$batch->id}");
+                $label = $batch instanceof Roasting
+                    ? $batch->batch
+                    : ($batch->rawMaterialStock?->batch_number ?? "#{$batch->id}");
                 throw new \Exception("Not enough stock in batch {$label}. Available: {$batch->remainingUsable()} kg.");
             }
 
@@ -196,18 +229,5 @@ class Milling extends Model
                 $batch->save();
             });
         }
-    }
-
-    private static function resolveBatch(string $type, int $stockId): Roasting|Sorting
-    {
-        $batch = in_array($type, ['soy', 'maize'], true)
-            ? Roasting::query()->lockForUpdate()->find($stockId)
-            : Sorting::query()->lockForUpdate()->with('rawMaterialStock')->find($stockId);
-
-        if (! $batch) {
-            throw new \Exception('Selected batch does not exist.');
-        }
-
-        return $batch;
     }
 }
