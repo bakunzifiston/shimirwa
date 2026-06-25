@@ -6,6 +6,7 @@ use App\Models\ProductCatalog;
 use App\Models\Roasting;
 use App\Models\Sorting;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class StoreMillingRequest extends FormRequest
 {

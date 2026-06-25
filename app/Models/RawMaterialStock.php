@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Inventory\InventoryReferences;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -17,16 +18,15 @@ class RawMaterialStock extends Model
     ];
 
     protected $fillable = [
-    'date',
-    'client_id',
-    'item',
-    'type',          // <-- added this line
-    'received',
-    'rejected',
-    'quantity_in',
-    'comment',
-    'batch_number',
-    'employee_id',
+        'date',
+        'client_id',
+        'item',
+        'type',
+        'received',
+        'rejected',
+        'comment',
+        'batch_number',
+        'employee_id',
     ];
 
     public function employee()
@@ -55,6 +55,42 @@ class RawMaterialStock extends Model
         return $query->where(function ($q) {
             $q->whereIn('type', ['Packaging Material', 'Packaging Staff', 'packaging staff', 'packaging material']);
         });
+    }
+
+    public function scopeRawMaterialKg($query)
+    {
+        return $query->where('type', 'Raw Material');
+    }
+
+    /**
+     * Raw-material batches with usable stock for sorting (and similar pickers).
+     * Optionally include a linked batch on edit even when depleted.
+     */
+    public function scopeAvailableForSorting($query, ?int $includeId = null)
+    {
+        return $query
+            ->rawMaterialKg()
+            ->where(function ($q) use ($includeId) {
+                $q->where('quantity_in', '>=', 0.01);
+                if ($includeId) {
+                    $q->orWhere('id', $includeId);
+                }
+            });
+    }
+
+    public function hasAvailableStock(): bool
+    {
+        return $this->remainingQuantity() >= 0.01;
+    }
+
+    public function remainingQuantity(): float
+    {
+        return max((float) $this->quantity_in, 0);
+    }
+
+    public function initialNetQuantity(): float
+    {
+        return max((float) $this->received - (float) $this->rejected, 0);
     }
 
     protected static function booted()

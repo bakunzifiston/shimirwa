@@ -8,20 +8,24 @@
     <x-admin.page-stats :stats="$pageStats" />
     <x-admin.listing :paginator="$clients" :show-search="false">
         <x-slot:toolbar>
-            <form method="GET" class="flex flex-1 flex-wrap items-center gap-2">
+            <form method="GET" class="admin-filter-bar">
                 <div class="admin-search-wrap">
                     <x-admin.icon name="search" class="!absolute !left-3 !top-1/2 !h-4 !w-4 !-translate-y-1/2" style="color: var(--admin-text-subtle)" />
                     <input type="search" name="search" value="{{ $search }}" placeholder="Search clientsâ€¦" class="admin-input">
                 </div>
-                <select name="role" class="admin-input w-auto min-w-[8rem]">
-                    <option value="">All roles</option>
-                    <option value="client" @selected($role === 'client')>Clients</option>
-                    <option value="supplier" @selected($role === 'supplier')>Suppliers</option>
-                </select>
-                <button type="submit" class="admin-btn admin-btn-secondary admin-btn-sm">Filter</button>
-                @if ($search || $role)
-                    <a href="{{ route('admin.clients.index') }}" class="admin-btn admin-btn-ghost admin-btn-sm">Clear</a>
-                @endif
+                <div class="admin-filter-bar__filters">
+                    <select name="role" class="admin-input" aria-label="Client role">
+                        <option value="">All roles</option>
+                        <option value="client" @selected($role === 'client')>Clients</option>
+                        <option value="supplier" @selected($role === 'supplier')>Suppliers</option>
+                    </select>
+                </div>
+                <div class="admin-filter-bar__actions">
+                    <button type="submit" class="admin-btn admin-btn-secondary admin-btn-sm">Apply</button>
+                    @if ($search || $role)
+                        <a href="{{ route('admin.clients.index') }}" class="admin-btn admin-btn-ghost admin-btn-sm">Clear</a>
+                    @endif
+                </div>
             </form>
         </x-slot:toolbar>
         <x-slot:actions>

@@ -51,7 +51,11 @@ class EmballageController extends Controller
 
     public function store(StoreEmballageRequest $request): RedirectResponse
     {
-        Emballage::create($request->validated());
+        try {
+            Emballage::create($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.emballages.index')->with('success', 'Packaging recorded.');
     }
@@ -70,14 +74,22 @@ class EmballageController extends Controller
 
     public function update(UpdateEmballageRequest $request, Emballage $emballage): RedirectResponse
     {
-        $emballage->update($request->validated());
+        try {
+            $emballage->update($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.emballages.show', $emballage)->with('success', 'Packaging updated.');
     }
 
     public function destroy(Emballage $emballage): RedirectResponse
     {
-        $emballage->delete();
+        try {
+            $emballage->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.emballages.index')->with('success', 'Packaging deleted.');
     }

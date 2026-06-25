@@ -40,7 +40,7 @@ class CheckoutController extends Controller
 
         try {
             $order = $this->checkout->placeOrder(
-                $request->only(['name', 'phone', 'email', 'address', 'notes']),
+                $request->only(['name', 'phone', 'email', 'address', 'notes', 'payment_method']),
                 $request->input('idempotency_key'),
             );
         } catch (\InvalidArgumentException $e) {
@@ -56,7 +56,7 @@ class CheckoutController extends Controller
         $this->cart->regenerateIdempotencyKey();
 
         return redirect()
-            ->route('checkout.success', $order)
+            ->signedRoute('checkout.success', ['order' => $order])
             ->with('success', 'Your order has been placed successfully.');
     }
 

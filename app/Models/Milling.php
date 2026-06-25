@@ -2,11 +2,10 @@
 
 namespace App\Models;
 
+use App\Support\Inventory\MillingItemUsage;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Roasting;
-use App\Models\Sorting;
-use App\Models\Employee;
+use Illuminate\Support\Facades\DB;
 
 class Milling extends Model
 {
@@ -25,6 +24,9 @@ class Milling extends Model
     protected $casts = [
         'date' => 'date',
         'items' => 'array',
+        'total_mixed_quantity' => 'float',
+        'output_flour' => 'float',
+        'loss' => 'float',
     ];
 
     public function employee()
@@ -164,6 +166,10 @@ class Milling extends Model
                     \DB::table($table)->where('id', $stockId)->increment('quantity_in', abs($diff));
                 }
             }
+
+            DB::transaction(function () use ($milling) {
+                self::restoreItemQuantities(self::normalizeMillingItems($milling->items));
+            });
         });
 
         static::deleted(function ($milling) {
@@ -174,5 +180,83 @@ class Milling extends Model
                 \DB::table($table)->where('id', $item['stock_id'])->increment('quantity_in', $qty);
             }
         });
+    }
+
+    /**
+     * Deduct ingredient quantities from sorting/roasting batches on create.
+     *
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    private static function deductItemQuantities(array $items): void
+    {
+        self::applyItemDiff([], $items);
+    }
+
+    /**
+     * Restore ingredient quantities to sorting/roasting batches on delete.
+     *
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    private static function restoreItemQuantities(array $items): void
+    {
+        self::applyItemDiff($items, []);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $oldItems
+     * @param  array<int, array<string, mixed>>  $newItems
+     */
+    private static function applyItemDiff(array $oldItems, array $newItems): void
+    {
+        $buildMap = function (array $items): array {
+            $map = [];
+            foreach ($items as $item) {
+                $key = ($item['type'] ?? '').':'.($item['stock_id'] ?? '');
+                $map[$key] = ($map[$key] ?? 0) + floatval($item['quantity'] ?? 0);
+            }
+
+            return $map;
+        };
+
+        $oldMap = $buildMap($oldItems);
+        $newMap = $buildMap($newItems);
+        $allKeys = array_unique(array_merge(array_keys($oldMap), array_keys($newMap)));
+
+        foreach ($allKeys as $key) {
+            [$type, $stockId] = explode(':', $key, 2);
+            if (! $type || ! $stockId) {
+                continue;
+            }
+
+            $diff = ($newMap[$key] ?? 0) - ($oldMap[$key] ?? 0);
+            if ($diff == 0) {
+                continue;
+            }
+
+            $batch = self::resolveBatch($type, (int) $stockId);
+
+            if ($diff > 0 && $batch->remainingUsable() < $diff) {
+                $label = $batch instanceof Roasting ? $batch->batch : ($batch->rawMaterialStock?->batch_number ?? "#{$batch->id}");
+                throw new \Exception("Not enough stock in batch {$label}. Available: {$batch->remainingUsable()} kg.");
+            }
+
+            $batch::withoutEvents(function () use ($batch, $diff) {
+                $batch->quantity_remaining = max($batch->remainingUsable() - $diff, 0);
+                $batch->save();
+            });
+        }
+    }
+
+    private static function resolveBatch(string $type, int $stockId): Roasting|Sorting
+    {
+        $batch = in_array($type, ['soy', 'maize'], true)
+            ? Roasting::query()->lockForUpdate()->find($stockId)
+            : Sorting::query()->lockForUpdate()->with('rawMaterialStock')->find($stockId);
+
+        if (! $batch) {
+            throw new \Exception('Selected batch does not exist.');
+        }
+
+        return $batch;
     }
 }

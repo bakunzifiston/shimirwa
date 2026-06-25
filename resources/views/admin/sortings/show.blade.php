@@ -13,6 +13,8 @@
 <div><dt class="text-slate-500 text-sm">Date</dt><dd>{{ $sorting->date?->format('Y-m-d') }}</dd></div>
 <div><dt class="text-slate-500 text-sm">Batch</dt><dd>{{ $sorting->rawMaterialStock?->item }} — {{ $sorting->rawMaterialStock?->batch_number }}</dd></div>
 <div><dt class="text-slate-500 text-sm">Quantity in</dt><dd>{{ number_format($sorting->quantity_in,2) }} kg</dd></div>
+<div><dt class="text-slate-500 text-sm">Quantity out</dt><dd>{{ number_format($sorting->quantityOut(),2) }} kg</dd></div>
+<div><dt class="text-slate-500 text-sm">Remaining</dt><dd>{{ number_format($sorting->remainingUsable(),2) }} kg</dd></div>
 <div><dt class="text-slate-500 text-sm">Loss</dt><dd>{{ number_format($sorting->loss,2) }} kg</dd></div>
 <div><dt class="text-slate-500 text-sm">Employee</dt><dd>{{ $sorting->employee?->full_name }}</dd></div>
 </dl><form method="POST" action="{{ route('admin.sortings.destroy',$sorting) }}" class="mt-8 border-t pt-6" onsubmit="return confirm('Delete?')">@csrf @method('DELETE')<button class="rounded bg-red-600 px-4 py-2 text-sm text-white">Delete</button></form></div>@endsection

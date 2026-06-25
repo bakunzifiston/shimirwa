@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Admin\Sale;
 
+use App\Support\Inventory\FormRequestStockValidator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class StoreSaleRequest extends FormRequest
 {
@@ -26,5 +28,23 @@ class StoreSaleRequest extends FormRequest
             'batches.*.unit_price' => ['required', 'numeric', 'min:0'],
             'batches.*.line_total' => ['required', 'numeric', 'min:0'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator) {
+            $batches = $this->input('batches', []);
+            $existing = $this->route('sale');
+
+            foreach (FormRequestStockValidator::saleBatches($batches, $existing) as $field => $message) {
+                $validator->errors()->add($field, $message);
+            }
+
+            $totalSold = (int) collect($batches)->sum(fn ($b) => (int) ($b['quantity'] ?? 0));
+            $returnedMessage = FormRequestStockValidator::saleReturned((float) $this->input('returned', 0), $totalSold);
+            if ($returnedMessage) {
+                $validator->errors()->add('returned', $returnedMessage);
+            }
+        });
     }
 }

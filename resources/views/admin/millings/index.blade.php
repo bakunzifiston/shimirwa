@@ -19,9 +19,18 @@
             </a>
         </x-slot:actions>
 
-        <x-slot:head>
-            <th>Date</th><th>Batch</th><th>Mixed</th><th>Output</th><th>Employee</th><th class="text-right">Actions</th>
-        </x-slot:head>
+        <x-admin.listing
+            :paginator="$millings"
+            :search="$search"
+            :clear-route="route('admin.millings.index')"
+            placeholder="Search batch…"
+        >
+            <x-slot:actions>
+                <a href="{{ route('admin.millings.create') }}" class="admin-btn admin-btn-primary admin-btn-sm">
+                    <x-admin.icon name="plus" class="!h-4 !w-4" />
+                    Add milling
+                </a>
+            </x-slot:actions>
 
         @forelse ($millings as $milling)
             <tr>

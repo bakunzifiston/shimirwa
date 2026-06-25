@@ -28,7 +28,7 @@ class StoreRoastingRequest extends FormRequest
         ];
     }
 
-    public function withValidator($validator): void
+    public function withValidator(Validator $validator): void
     {
         $validator->after(function ($validator) {
             $totalQty    = (float) $this->input('quantity_in', 0);

@@ -102,6 +102,17 @@
                value="{{ old('loss', $roasting->loss ?? 0) }}" required>
     </div>
 
+    @if ($roasting->exists)
+        <div>
+            <span class="admin-label">Quantity out</span>
+            <p class="text-sm font-medium">{{ number_format($roasting->quantityOut(), 2) }} kg</p>
+        </div>
+        <div>
+            <span class="admin-label">Remaining</span>
+            <p class="text-sm font-medium">{{ number_format($roasting->remainingUsable(), 2) }} kg</p>
+        </div>
+    @endif
+
     <div>
         <label class="admin-label">Net out (kg)</label>
         <input type="number" step="0.01" id="net_out" class="admin-input" style="background:var(--admin-bg)" readonly value="0">

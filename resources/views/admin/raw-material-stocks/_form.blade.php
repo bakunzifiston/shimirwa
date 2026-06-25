@@ -64,9 +64,10 @@
     </div>
 
     <div>
-        <label class="admin-label" for="quantity_in_display">Net quantity in</label>
+        <label class="admin-label" for="quantity_in_display">Remaining quantity</label>
         <input id="quantity_in_display" type="number" step="0.01" class="admin-input bg-slate-100" readonly
-               value="{{ old('quantity_in', $stock->quantity_in ?? 0) }}">
+               value="{{ number_format($stock->remainingQuantity(), 2, '.', '') }}">
+        <p class="mt-1 text-xs text-slate-500">Current available balance after production deductions.</p>
         <p class="mt-1 text-xs text-slate-500">Calculated: received − rejected</p>
     </div>
 

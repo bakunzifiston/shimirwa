@@ -106,14 +106,22 @@ class MillingController extends Controller
 
     public function update(UpdateMillingRequest $request, Milling $milling): RedirectResponse
     {
-        $milling->update($request->validated());
+        try {
+            $milling->update($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['update' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.millings.show', $milling)->with('success', 'Milling updated.');
     }
 
     public function destroy(Milling $milling): RedirectResponse
     {
-        $milling->delete();
+        try {
+            $milling->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.millings.index')->with('success', 'Milling deleted.');
     }
@@ -157,5 +165,32 @@ class MillingController extends Controller
             'sortingOptions'  => $sortingOptions,
             'catalogItems'    => $catalogItems,
         ];
+    }
+
+    protected function availableRoastings(array $includeIds = [])
+    {
+        return Roasting::query()
+            ->where(function ($query) use ($includeIds) {
+                $query->where('quantity_remaining', '>', 0);
+                if ($includeIds !== []) {
+                    $query->orWhereIn('id', $includeIds);
+                }
+            })
+            ->orderByDesc('date')
+            ->get();
+    }
+
+    protected function availableSortings(array $includeIds = [])
+    {
+        return Sorting::query()
+            ->with('rawMaterialStock')
+            ->where(function ($query) use ($includeIds) {
+                $query->where('quantity_remaining', '>', 0);
+                if ($includeIds !== []) {
+                    $query->orWhereIn('id', $includeIds);
+                }
+            })
+            ->orderByDesc('date')
+            ->get();
     }
 }

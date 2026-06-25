@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Inventory\MillingItemUsage;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -9,12 +10,26 @@ use App\Models\Employee;
 use App\Models\ProductCatalog;
 use App\Models\RawMaterialStock;
 
+/**
+ * Sorting production batch.
+ *
+ * quantity_in        — gross input taken from raw material (kg)
+ * quantity_out       — computed usable output (quantity_in - loss)
+ * quantity_remaining — balance available for roasting/milling
+ *
+ * On delete: restores quantity_in to raw_material_stocks.quantity_in
+ * (blocked when referenced by roasting or milling).
+ */
 class Sorting extends Model
 {
     use HasFactory;
+    use ManagesPipelineBatch;
 
     protected $casts = [
         'date' => 'date',
+        'quantity_in' => 'float',
+        'quantity_remaining' => 'float',
+        'loss' => 'float',
     ];
 
     protected $fillable = [
@@ -46,7 +61,8 @@ class Sorting extends Model
         static::creating(function ($sorting) {
             $stock = RawMaterialStock::find($sorting->raw_material_stock_id);
 
-            if (!$stock) {
+            $stock = RawMaterialStock::query()->find($sorting->raw_material_stock_id);
+            if (! $stock) {
                 throw new \Exception('No matching stock found for this batch.');
             }
 

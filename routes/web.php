@@ -25,7 +25,9 @@ Route::delete('/cart/remove/{product}', [CartController::class, 'remove'])->name
 
 Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
 Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store')->middleware('throttle:12,1');
-Route::get('/checkout/success/{order}', [CheckoutController::class, 'success'])->name('checkout.success');
+Route::get('/checkout/success/{order}', [CheckoutController::class, 'success'])
+    ->middleware('signed')
+    ->name('checkout.success');
 
 Route::get('/contact', [ContactController::class, 'show'])->name('contact');
 Route::post('/contact', [ContactController::class, 'store'])->name('contact.store');

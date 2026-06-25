@@ -11,6 +11,8 @@
             <p><strong>Phone:</strong> {{ $order->customer->phone }}</p>
             @if ($order->customer->email)<p><strong>Email:</strong> {{ $order->customer->email }}</p>@endif
             <p><strong>Address:</strong> {{ $order->customer->address }}</p>
+            <p><strong>Payment method:</strong> {{ $order->paymentMethodLabel() }}</p>
+            <p><strong>Payment status:</strong> {{ ucfirst($order->payment_status) }}</p>
             <p class="text-sm opacity-70">Placed {{ $order->created_at->format('M j, Y H:i') }}</p>
         </div>
 

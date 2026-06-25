@@ -12,15 +12,17 @@
             @isset($toolbar)
                 {{ $toolbar }}
             @elseif ($showSearch)
-                <form method="GET" class="flex flex-1 flex-wrap items-center gap-2">
+                <form method="GET" class="admin-filter-bar">
                     <div class="admin-search-wrap">
                         <x-admin.icon name="search" class="!absolute !left-3 !top-1/2 !h-4 !w-4 !-translate-y-1/2" style="color: var(--admin-text-subtle)" />
                         <input type="search" name="search" value="{{ $search }}" placeholder="{{ $placeholder }}" class="admin-input">
                     </div>
-                    <button type="submit" class="admin-btn admin-btn-secondary admin-btn-sm">Search</button>
-                    @if ($search && $clearRoute)
-                        <a href="{{ $clearRoute }}" class="admin-btn admin-btn-ghost admin-btn-sm">Clear</a>
-                    @endif
+                    <div class="admin-filter-bar__actions">
+                        <button type="submit" class="admin-btn admin-btn-secondary admin-btn-sm">Search</button>
+                        @if ($search && $clearRoute)
+                            <a href="{{ $clearRoute }}" class="admin-btn admin-btn-ghost admin-btn-sm">Clear</a>
+                        @endif
+                    </div>
                 </form>
             @endif
             @isset($actions)

@@ -25,6 +25,8 @@
                 @else — @endif
             </dd></div>
             <div><dt class="text-sm text-slate-500">Quantity in</dt><dd>{{ number_format($roasting->quantity_in, 2) }} kg</dd></div>
+            <div><dt class="text-sm text-slate-500">Quantity out</dt><dd>{{ number_format($roasting->quantityOut(), 2) }} kg</dd></div>
+            <div><dt class="text-sm text-slate-500">Remaining</dt><dd>{{ number_format($roasting->remainingUsable(), 2) }} kg</dd></div>
             <div><dt class="text-sm text-slate-500">Loss</dt><dd>{{ number_format($roasting->loss, 2) }} kg</dd></div>
             <div><dt class="text-sm text-slate-500">Chef</dt><dd>{{ $roasting->chef?->full_name }}</dd></div>
             <div><dt class="text-sm text-slate-500">Supervisor</dt><dd>{{ $roasting->supervisor?->full_name }}</dd></div>

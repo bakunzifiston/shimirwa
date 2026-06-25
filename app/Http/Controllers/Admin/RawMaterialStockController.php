@@ -125,7 +125,11 @@ class RawMaterialStockController extends Controller
 
     public function destroy(RawMaterialStock $rawMaterialStock): RedirectResponse
     {
-        $rawMaterialStock->delete();
+        try {
+            $rawMaterialStock->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()
             ->route('admin.raw-material-stocks.index')

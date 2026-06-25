@@ -15,7 +15,7 @@ class CheckoutService
     ) {}
 
     /**
-     * @param  array{name: string, phone: string, address: string, email?: string|null, notes?: string|null}  $customerData
+     * @param  array{name: string, phone: string, address: string, email?: string|null, notes?: string|null, payment_method: string}  $customerData
      */
     public function placeOrder(array $customerData, string $idempotencyKey): Order
     {
@@ -67,6 +67,7 @@ class CheckoutService
                 'customer_id' => $customer->id,
                 'subtotal' => $subtotal,
                 'total' => $subtotal,
+                'payment_method' => $customerData['payment_method'] ?? Order::PAYMENT_METHOD_COD,
                 'payment_status' => Order::PAYMENT_PENDING,
                 'order_status' => Order::STATUS_NEW,
                 'idempotency_key' => $idempotencyKey,

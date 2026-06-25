@@ -1,7 +1,7 @@
 @extends('layouts.admin')
 @section('title', 'Dashboard')
 @section('page_title', 'Dashboard')
-@section('page_subtitle', 'Overview of inventory, production, and sales')
+@section('page_subtitle', 'Key metrics and recent activity')
 
 @section('content')
 
@@ -523,3 +523,10 @@
 @endpush
 
 @endsection
+
+@push('scripts')
+    <script>
+        window.adminDashboardCharts = @json($chartData);
+    </script>
+    @vite('resources/js/admin-dashboard.js')
+@endpush

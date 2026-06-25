@@ -109,7 +109,7 @@ class SortingController extends Controller
     {
         return view('admin.sortings.edit', [
             'sorting' => $sorting,
-            'stocks' => $this->availableStocks(),
+            'stocks' => $this->availableStocks($sorting->raw_material_stock_id),
             'employees' => Employee::orderBy('full_name')->get(),
         ]);
     }
@@ -127,12 +127,16 @@ class SortingController extends Controller
 
     public function destroy(Sorting $sorting): RedirectResponse
     {
-        $sorting->delete();
+        try {
+            $sorting->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sortings.index')->with('success', 'Sorting deleted.');
     }
 
-    protected function availableStocks()
+    protected function availableStocks(?int $includeId = null)
     {
         // Only show batches whose item is flagged as requires_sorting in the catalog.
         // If no catalog items are flagged yet, fall back to all available stocks.
@@ -143,6 +147,9 @@ class SortingController extends Controller
             ->where('quantity_in', '>', 0)
             ->when($sortableItems->isNotEmpty(), fn ($q) => $q->whereIn('item', $sortableItems))
             ->orderByDesc('date')
-            ->get();
+            ->get()
+            ->filter(fn (RawMaterialStock $stock) => $stock->hasAvailableStock()
+                || ($includeId && (int) $stock->id === (int) $includeId))
+            ->values();
     }
 }

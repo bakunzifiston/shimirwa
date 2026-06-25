@@ -112,7 +112,11 @@ class RoastingController extends Controller
 
     public function destroy(Roasting $roasting): RedirectResponse
     {
-        $roasting->delete();
+        try {
+            $roasting->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.roastings.index')->with('success', 'Roasting deleted.');
     }
@@ -156,7 +160,7 @@ class RoastingController extends Controller
         ];
     }
 
-    protected function mapPayload(array $data): array
+    protected function availableRawStocks(?int $includeId = null)
     {
         // source_batch is "raw:ID" or "sorting:ID" — split it out
         $sourceBatch = $data['source_batch'] ?? $data['_source_batch_hint'] ?? '';
@@ -169,4 +173,19 @@ class RoastingController extends Controller
 
         return $data;
     }
+
+    protected function availableSortingStocks(?int $includeId = null)
+    {
+        return Sorting::query()
+            ->with('rawMaterialStock')
+            ->where(function ($query) use ($includeId) {
+                $query->where('quantity_remaining', '>', 0);
+                if ($includeId) {
+                    $query->orWhere('id', $includeId);
+                }
+            })
+            ->orderByDesc('date')
+            ->get();
+    }
+
 }

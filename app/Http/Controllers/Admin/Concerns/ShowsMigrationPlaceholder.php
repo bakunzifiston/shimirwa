@@ -6,8 +6,8 @@ use Illuminate\View\View;
 
 trait ShowsMigrationPlaceholder
 {
-    protected function placeholder(string $title, string $description, ?string $filamentResource = null): View
+    protected function placeholder(string $title, string $description): View
     {
-        return view('admin.modules.placeholder', compact('title', 'description', 'filamentResource'));
+        return view('admin.modules.placeholder', compact('title', 'description'));
     }
 }

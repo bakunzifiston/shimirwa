@@ -71,6 +71,8 @@ return [
         'quantity' => 'chart',
         'packaging' => 'package',
         'damaged' => 'alert',
+        'products' => 'package',
+        'orders' => 'cart',
     ],
 
 ];

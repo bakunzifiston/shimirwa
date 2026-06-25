@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin\RawMaterialStock;
 
+use App\Models\RawMaterialStock;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -22,7 +23,13 @@ class StoreRawMaterialStockRequest extends FormRequest
             'received' => ['required', 'numeric', 'min:0'],
             'rejected' => ['required', 'numeric', 'min:0'],
             'comment' => ['nullable', 'string', 'max:255'],
-            'batch_number' => ['required', 'string', 'max:255'],
+            'batch_number' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique(RawMaterialStock::class, 'batch_number')
+                    ->where(fn ($query) => $query->where('type', $this->input('type'))),
+            ],
             'employee_id' => ['required', 'exists:employees,id'],
         ];
     }

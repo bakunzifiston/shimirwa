@@ -50,7 +50,11 @@ class SaleController extends Controller
 
     public function store(StoreSaleRequest $request): RedirectResponse
     {
-        Sale::create($request->validated());
+        try {
+            Sale::create($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sales.index')->with('success', 'Sale recorded.');
     }
@@ -69,26 +73,45 @@ class SaleController extends Controller
 
     public function update(UpdateSaleRequest $request, Sale $sale): RedirectResponse
     {
-        $sale->update($request->validated());
+        try {
+            $sale->update($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['form' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sales.show', $sale)->with('success', 'Sale updated.');
     }
 
     public function destroy(Sale $sale): RedirectResponse
     {
-        $sale->delete();
+        try {
+            $sale->delete();
+        } catch (\Exception $e) {
+            return back()->withErrors(['delete' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sales.index')->with('success', 'Sale deleted.');
     }
 
     protected function formData(Sale $sale): array
     {
+        $includeEmballageIds = collect($sale->batches ?? [])
+            ->pluck('emballage_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
         return [
             'sale' => $sale,
             'clients' => Client::where('role', 'client')->orderBy('full_name')->get(),
             'employees' => Employee::orderBy('full_name')->get(),
             'emballages' => Emballage::with('milling')
-                ->where('item', '>', 0)
+                ->where(function ($query) use ($includeEmballageIds) {
+                    $query->where('item', '>', 0);
+                    if ($includeEmballageIds !== []) {
+                        $query->orWhereIn('id', $includeEmballageIds);
+                    }
+                })
                 ->orderByDesc('date')
                 ->get(),
         ];
