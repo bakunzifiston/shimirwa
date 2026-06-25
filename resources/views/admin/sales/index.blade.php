@@ -10,27 +10,18 @@
         :paginator="$sales"
         :search="$search"
         :clear-route="route('admin.sales.index')"
-        placeholder="Search salesâ€¦"
+        placeholder="Search sales…"
     >
         <x-slot:actions>
-            <a href="{{ route('admin.sales.create') }}" data-drawer-src="{{ route('admin.sales.create') }}" data-drawer-title="Add" class="admin-btn admin-btn-primary admin-btn-sm">
+            <a href="{{ route('admin.sales.create') }}" data-drawer-src="{{ route('admin.sales.create') }}" data-drawer-title="Add sale" class="admin-btn admin-btn-primary admin-btn-sm">
                 <x-admin.icon name="plus" class="!h-4 !w-4" />
                 Add sale
             </a>
         </x-slot:actions>
 
-        <x-admin.listing
-            :paginator="$sales"
-            :search="$search"
-            :clear-route="route('admin.sales.index')"
-            placeholder="Search sales…"
-        >
-            <x-slot:actions>
-                <a href="{{ route('admin.sales.create') }}" class="admin-btn admin-btn-primary admin-btn-sm">
-                    <x-admin.icon name="plus" class="!h-4 !w-4" />
-                    Add sale
-                </a>
-            </x-slot:actions>
+        <x-slot:head>
+            <th>Date</th><th>Product</th><th>Client</th><th>Employee</th><th class="text-right">Actions</th>
+        </x-slot:head>
 
         @forelse ($sales as $sale)
             <tr>
@@ -51,4 +42,3 @@
         @endforelse
     </x-admin.listing>
 @endsection
-

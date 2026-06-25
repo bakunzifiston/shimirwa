@@ -9,15 +9,18 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('employees', function (Blueprint $table) {
-            // Comma-separated specialties: 'reception', 'packaging', 'roasting', 'sorting', 'milling', 'sales'
-            $table->string('specialties')->nullable()->after('position');
+            if (! Schema::hasColumn('employees', 'specialties')) {
+                $table->string('specialties')->nullable()->after('position');
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('employees', function (Blueprint $table) {
-            $table->dropColumn('specialties');
+            if (Schema::hasColumn('employees', 'specialties')) {
+                $table->dropColumn('specialties');
+            }
         });
     }
 };

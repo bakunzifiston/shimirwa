@@ -523,10 +523,3 @@
 @endpush
 
 @endsection
-
-@push('scripts')
-    <script>
-        window.adminDashboardCharts = @json($chartData);
-    </script>
-    @vite('resources/js/admin-dashboard.js')
-@endpush

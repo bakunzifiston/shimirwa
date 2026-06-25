@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ManagesPipelineBatch;
 use App\Support\Inventory\MillingItemUsage;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;

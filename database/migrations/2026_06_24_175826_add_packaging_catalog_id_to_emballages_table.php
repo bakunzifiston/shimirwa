@@ -11,20 +11,33 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('emballages', function (Blueprint $table) {
-            // Add FK to packaging catalog (nullable so existing rows don't break)
-            $table->foreignId('packaging_catalog_id')
-                ->nullable()
-                ->after('milling_id')
-                ->constrained('packaging_catalogs')
-                ->nullOnDelete();
+        if (! Schema::hasTable('packaging_catalogs')) {
+            Schema::create('packaging_catalogs', function (Blueprint $table) {
+                $table->id();
+                $table->string('name');
+                $table->decimal('kg_per_unit', 8, 3);
+                $table->boolean('manual_weight')->default(false);
+                $table->boolean('is_active')->default(true);
+                $table->unsignedSmallInteger('sort_order')->default(0);
+                $table->string('description')->nullable();
+                $table->timestamps();
+            });
+        }
 
-            // Also add packaging_batch_id and envelope_stock_id if they don't exist
-            // (original migration may have been created without them)
-            if (!\Schema::hasColumn('emballages', 'packaging_batch_id')) {
+        Schema::table('emballages', function (Blueprint $table) {
+            if (! Schema::hasColumn('emballages', 'packaging_catalog_id')) {
+                $table->foreignId('packaging_catalog_id')
+                    ->nullable()
+                    ->after('milling_id')
+                    ->constrained('packaging_catalogs')
+                    ->nullOnDelete();
+            }
+
+            if (! Schema::hasColumn('emballages', 'packaging_batch_id')) {
                 $table->string('packaging_batch_id')->nullable()->after('date');
             }
-            if (!\Schema::hasColumn('emballages', 'envelope_stock_id')) {
+
+            if (! Schema::hasColumn('emballages', 'envelope_stock_id')) {
                 $table->foreignId('envelope_stock_id')
                     ->nullable()
                     ->after('raw_material_stock_id')
@@ -32,15 +45,14 @@ return new class extends Migration
                     ->nullOnDelete();
             }
         });
-
-        // Keep packaging_type for backward compat — we'll phase it out gradually
-        // It stays in the table as a fallback display label
     }
 
     public function down(): void
     {
         Schema::table('emballages', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('packaging_catalog_id');
+            if (Schema::hasColumn('emballages', 'packaging_catalog_id')) {
+                $table->dropConstrainedForeignId('packaging_catalog_id');
+            }
         });
     }
 };
