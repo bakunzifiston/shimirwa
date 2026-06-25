@@ -1,18 +1,19 @@
-@extends('layouts.admin')
+﻿@extends('layouts.admin')
 
 @section('title', 'Milling')
 @section('page_title', 'Milling')
 @section('page_subtitle', 'Milling batches and flour output')
 
 @section('content')
+    <x-admin.page-stats :stats="$pageStats" />
     <x-admin.listing
         :paginator="$millings"
         :search="$search"
         :clear-route="route('admin.millings.index')"
-        placeholder="Search batch…"
+        placeholder="Search batchâ€¦"
     >
         <x-slot:actions>
-            <a href="{{ route('admin.millings.create') }}" class="admin-btn admin-btn-primary admin-btn-sm">
+            <a href="{{ route('admin.millings.create') }}" data-drawer-src="{{ route('admin.millings.create') }}" data-drawer-title="Add" class="admin-btn admin-btn-primary admin-btn-sm">
                 <x-admin.icon name="plus" class="!h-4 !w-4" />
                 Add milling
             </a>
@@ -33,6 +34,7 @@
                     <x-admin.row-actions
                         :view-route="route('admin.millings.show', $milling)"
                         :edit-route="route('admin.millings.edit', $milling)"
+                        :delete-route="route('admin.millings.destroy', $milling)"
                     />
                 </td>
             </tr>
@@ -41,3 +43,4 @@
         @endforelse
     </x-admin.listing>
 @endsection
+

@@ -23,7 +23,15 @@ class UserController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.users.index', compact('users', 'search'));
+        $total     = User::count();
+        $thisMonth = User::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->count();
+        $delta     = $thisMonth > 0 ? '+'.($thisMonth).' this month' : 'none this month';
+        $pageStats = [
+            ['label' => 'Total users',    'value' => $total,     'icon' => 'users', 'color' => 'blue',   'delta' => null],
+            ['label' => 'Added this month','value' => $thisMonth, 'icon' => 'calendar', 'color' => 'green',  'delta' => null],
+        ];
+
+        return view('admin.users.index', compact('users', 'search', 'pageStats'));
     }
 
     public function create(): View

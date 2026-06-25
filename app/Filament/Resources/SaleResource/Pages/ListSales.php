@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Filament\Resources\SaleResource\Pages;
 
@@ -13,7 +13,9 @@ class ListSales extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()->slideOver(),
         ];
     }
 }
+
+

@@ -1,18 +1,19 @@
-@extends('layouts.admin')
+﻿@extends('layouts.admin')
 
 @section('title', 'Packaging')
 @section('page_title', 'Packaging')
 @section('page_subtitle', 'Packaging and emballage records')
 
 @section('content')
+    <x-admin.page-stats :stats="$pageStats" />
     <x-admin.listing
         :paginator="$emballages"
         :search="$search"
         :clear-route="route('admin.emballages.index')"
-        placeholder="Search packaging…"
+        placeholder="Search packagingâ€¦"
     >
         <x-slot:actions>
-            <a href="{{ route('admin.emballages.create') }}" class="admin-btn admin-btn-primary admin-btn-sm">
+            <a href="{{ route('admin.emballages.create') }}" data-drawer-src="{{ route('admin.emballages.create') }}" data-drawer-title="Add" class="admin-btn admin-btn-primary admin-btn-sm">
                 <x-admin.icon name="plus" class="!h-4 !w-4" />
                 Add packaging
             </a>
@@ -33,6 +34,7 @@
                     <x-admin.row-actions
                         :view-route="route('admin.emballages.show', $emballage)"
                         :edit-route="route('admin.emballages.edit', $emballage)"
+                        :delete-route="route('admin.emballages.destroy', $emballage)"
                     />
                 </td>
             </tr>
@@ -41,3 +43,4 @@
         @endforelse
     </x-admin.listing>
 @endsection
+

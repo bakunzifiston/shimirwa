@@ -27,7 +27,20 @@ class SaleController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.sales.index', compact('sales', 'search'));
+        $today        = Sale::whereDate('date', today())->count();
+        $thisMonth    = Sale::whereMonth('date', now()->month)->whereYear('date', now()->year)->count();
+        $lastMonth    = Sale::whereMonth('date', now()->subMonth()->month)->whereYear('date', now()->subMonth()->year)->count();
+        $totalRev     = (float) Sale::sum('total_price');
+        $monthRev     = (float) Sale::whereMonth('date', now()->month)->whereYear('date', now()->year)->sum('total_price');
+        $delta        = $lastMonth > 0 ? sprintf('%+d%%', round(($thisMonth - $lastMonth) / $lastMonth * 100)) : ($thisMonth > 0 ? '+100%' : '0%');
+        $pageStats = [
+            ['label' => 'Total sales',  'value' => Sale::count(), 'icon' => 'cart', 'color' => 'blue',   'delta' => null],
+            ['label' => 'Total revenue','value' => number_format($totalRev, 0).' RWF', 'icon' => 'chart', 'color' => 'green',  'delta' => null],
+            ['label' => 'Month revenue','value' => number_format($monthRev, 0).' RWF', 'icon' => 'calendar', 'color' => 'sky',    'delta' => null],
+            ['label' => 'This month',   'value' => $thisMonth.' sales', 'icon' => 'trend', 'color' => 'purple', 'delta' => $delta],
+        ];
+
+        return view('admin.sales.index', compact('sales', 'search', 'pageStats'));
     }
 
     public function create(): View

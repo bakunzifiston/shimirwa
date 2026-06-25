@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Sorting\StoreSortingRequest;
 use App\Http\Requests\Admin\Sorting\UpdateSortingRequest;
 use App\Models\Employee;
+use App\Models\ProductCatalog;
 use App\Models\RawMaterialStock;
 use App\Models\Sorting;
 use Illuminate\Http\RedirectResponse;
@@ -28,7 +29,20 @@ class SortingController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.sortings.index', compact('sortings', 'search'));
+        $today        = Sorting::whereDate('date', today())->count();
+        $thisMonth    = Sorting::whereMonth('date', now()->month)->whereYear('date', now()->year)->count();
+        $lastMonth    = Sorting::whereMonth('date', now()->subMonth()->month)->whereYear('date', now()->subMonth()->year)->count();
+        $totalKgIn    = (float) Sorting::sum('quantity_in');
+        $totalLoss    = (float) Sorting::sum('loss');
+        $delta        = $lastMonth > 0 ? sprintf('%+d%%', round(($thisMonth - $lastMonth) / $lastMonth * 100)) : ($thisMonth > 0 ? '+100%' : '0%');
+        $pageStats = [
+            ['label' => 'Total batches', 'value' => Sorting::count(), 'icon' => 'list', 'color' => 'blue',   'delta' => null],
+            ['label' => 'Total sorted',  'value' => number_format($totalKgIn, 1).' kg', 'icon' => 'scale', 'color' => 'sky',    'delta' => null],
+            ['label' => 'Total loss',    'value' => number_format($totalLoss, 1).' kg', 'icon' => 'alert', 'color' => 'red',    'delta' => null],
+            ['label' => 'This month',    'value' => $thisMonth, 'icon' => 'trend', 'color' => 'purple', 'delta' => $delta],
+        ];
+
+        return view('admin.sortings.index', compact('sortings', 'search', 'pageStats'));
     }
 
     public function create(): View
@@ -42,9 +56,46 @@ class SortingController extends Controller
 
     public function store(StoreSortingRequest $request): RedirectResponse
     {
-        Sorting::create($request->validated());
+        $allocations = $request->input('allocations', []);
 
-        return redirect()->route('admin.sortings.index')->with('success', 'Sorting recorded.');
+        // If only one batch (no split), wrap it in the allocations format
+        if (empty($allocations)) {
+            $allocations = [[
+                'raw_material_stock_id' => $request->input('raw_material_stock_id'),
+                'quantity_in'           => $request->input('quantity_in'),
+            ]];
+        }
+
+        $totalQty  = array_sum(array_column($allocations, 'quantity_in'));
+        $loss      = (float) $request->input('loss', 0);
+        $created   = [];
+
+        try {
+            \DB::transaction(function () use ($request, $allocations, $totalQty, $loss, &$created) {
+                foreach ($allocations as $alloc) {
+                    $qty = (float) $alloc['quantity_in'];
+                    // Distribute loss proportionally across batches
+                    $batchLoss = $totalQty > 0 ? round($loss * ($qty / $totalQty), 4) : 0;
+
+                    $created[] = Sorting::create([
+                        'date'                  => $request->input('date'),
+                        'raw_material_stock_id' => $alloc['raw_material_stock_id'],
+                        'quantity_in'           => $qty,
+                        'loss'                  => $batchLoss,
+                        'employee_id'           => $request->input('employee_id'),
+                    ]);
+                }
+            });
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['quantity_in' => $e->getMessage()]);
+        }
+
+        $count = count($created);
+        $msg   = $count > 1
+            ? "Sorting recorded across {$count} batches."
+            : 'Sorting recorded.';
+
+        return redirect()->route('admin.sortings.index')->with('success', $msg);
     }
 
     public function show(Sorting $sorting): View
@@ -65,7 +116,11 @@ class SortingController extends Controller
 
     public function update(UpdateSortingRequest $request, Sorting $sorting): RedirectResponse
     {
-        $sorting->update($request->validated());
+        try {
+            $sorting->update($request->validated());
+        } catch (\Exception $e) {
+            return back()->withInput()->withErrors(['raw_material_stock_id' => $e->getMessage()]);
+        }
 
         return redirect()->route('admin.sortings.show', $sorting)->with('success', 'Sorting updated.');
     }
@@ -79,8 +134,14 @@ class SortingController extends Controller
 
     protected function availableStocks()
     {
+        // Only show batches whose item is flagged as requires_sorting in the catalog.
+        // If no catalog items are flagged yet, fall back to all available stocks.
+        $sortableItems = ProductCatalog::active()->production()->requiresSorting()
+            ->pluck('name');
+
         return RawMaterialStock::query()
             ->where('quantity_in', '>', 0)
+            ->when($sortableItems->isNotEmpty(), fn ($q) => $q->whereIn('item', $sortableItems))
             ->orderByDesc('date')
             ->get();
     }

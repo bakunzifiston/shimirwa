@@ -23,88 +23,115 @@ class RawMaterialStockResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\DatePicker::make('date')
-                    ->required(),
-                
-                    BelongsToSelect::make('client_id')
-                    ->relationship('client', 'full_name')
-                    ->label('Supplier')
-                    ->searchable()
-                    ->required(),    
-                    
-Forms\Components\Select::make('type')
+                Forms\Components\Section::make('Basic Information')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\DatePicker::make('date')
+                            ->required()
+                            ->native(false)
+                            ->displayFormat('d/m/Y'),
 
-    ->label('Type')
-    ->options([
-        'Raw Material'    => 'Raw Material',
-        'Packaging Staff' => 'Packaging Staff',
-        'Other'           => 'Other',
-    ])
-    ->required()
-    ->reactive(),
+                        BelongsToSelect::make('client_id')
+                            ->relationship('client', 'full_name')
+                            ->label('Supplier')
+                            ->searchable()
+                            ->preload()
+                            ->required(),
 
-Forms\Components\Select::make('item')
-    ->label('Item')
-    ->options(function (callable $get) {
-        return match ($get('type')) {
-            'Raw Material' => [
-                'Maize'   => 'Maize',
-                'Soy'     => 'Soy',
-                'Sorghum' => 'Sorghum',
-                'Wheat'   => 'Wheat',
-            ],
-            'Packaging Staff' => [
-                '5kg' => '5kg',
-                '1kg' => '1kg',
-                'Box' => 'Box',
-                'Sack' => 'Sack',
-              
-            ],
-            default => [],
-        };
-    })
-    ->required()
-    ->searchable()
-    ->reactive()
-    ->hidden(fn (callable $get) => $get('type') === 'Other'), // hide Select when Other
+                        Forms\Components\Select::make('type')
+                            ->label('Type')
+                            ->options([
+                                'Raw Material'    => 'Raw Material',
+                                'Packaging Staff' => 'Packaging Staff',
+                                'Other'           => 'Other',
+                            ])
+                            ->required()
+                            ->live(),
 
-Forms\Components\TextInput::make('item')
-    ->label('Item')
-    ->placeholder('Enter custom item')
-    ->required(fn (callable $get) => $get('type') === 'Other')
-    ->hidden(fn (callable $get) => $get('type') !== 'Other'), // show TextInput only when Other
+                        Forms\Components\Select::make('item')
+                            ->label('Item')
+                            ->options(function (callable $get) {
+                                return match ($get('type')) {
+                                    'Raw Material' => [
+                                        'Maize'   => 'Maize',
+                                        'Soy'     => 'Soy',
+                                        'Sorghum' => 'Sorghum',
+                                        'Wheat'   => 'Wheat',
+                                    ],
+                                    'Packaging Staff' => [
+                                        '5kg'  => '5kg',
+                                        '1kg'  => '1kg',
+                                        'Box'  => 'Box',
+                                        'Sack' => 'Sack',
+                                    ],
+                                    default => [],
+                                };
+                            })
+                            ->required()
+                            ->searchable()
+                            ->live()
+                            ->hidden(fn (callable $get) => $get('type') === 'Other'),
 
-                Forms\Components\TextInput::make('received')
-                    ->label('Received Quantity')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
+                        Forms\Components\TextInput::make('item')
+                            ->label('Item (custom)')
+                            ->placeholder('Enter item name')
+                            ->required(fn (callable $get) => $get('type') === 'Other')
+                            ->hidden(fn (callable $get) => $get('type') !== 'Other'),
+                    ]),
 
-                Forms\Components\TextInput::make('rejected')
-                    ->label('Rejected Quantity')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
+                Forms\Components\Section::make('Quantities')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\TextInput::make('received')
+                            ->label('Received Quantity (kg)')
+                            ->required()
+                            ->numeric()
+                            ->default(0)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function ($state, callable $get, callable $set) {
+                                $set('quantity_in', max(0, (float) $state - (float) ($get('rejected') ?? 0)));
+                            }),
 
-                Forms\Components\TextInput::make('quantity_in')
-                    ->label('Net Quantity In')
-                    ->numeric()
-                    ->disabled() // read-only
-                    ->default(0)
-                    ->helperText('Automatically calculated: received - rejected'),
+                        Forms\Components\TextInput::make('rejected')
+                            ->label('Rejected Quantity (kg)')
+                            ->required()
+                            ->numeric()
+                            ->default(0)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function ($state, callable $get, callable $set) {
+                                $set('quantity_in', max(0, (float) ($get('received') ?? 0) - (float) $state));
+                            }),
 
-                Forms\Components\TextInput::make('comment')
-                    ->maxLength(255)
-                    ->nullable(),
+                        Forms\Components\TextInput::make('quantity_in')
+                            ->label('Net Quantity In (kg)')
+                            ->numeric()
+                            ->readOnly()
+                            ->default(0)
+                            ->helperText('Auto-calculated: Received − Rejected')
+                            ->columnSpan(2),
+                    ]),
 
-                Forms\Components\TextInput::make('batch_number')
-                    ->required()
-                    ->maxLength(255),
+                Forms\Components\Section::make('Tracking')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\TextInput::make('batch_number')
+                            ->label('Batch Number')
+                            ->required()
+                            ->maxLength(255),
 
-                BelongsToSelect::make('employee_id')
-                    ->relationship('employee', 'full_name')
-                    ->searchable()
-                    ->required(),
+                        BelongsToSelect::make('employee_id')
+                            ->relationship('employee', 'full_name')
+                            ->label('Responsible Employee')
+                            ->searchable()
+                            ->preload()
+                            ->required(),
+
+                        Forms\Components\Textarea::make('comment')
+                            ->label('Comment / Notes')
+                            ->maxLength(500)
+                            ->rows(2)
+                            ->columnSpan(2),
+                    ]),
             ]);
     }
 
@@ -115,52 +142,49 @@ Forms\Components\TextInput::make('item')
                 TextColumn::make('date')
                     ->date()
                     ->sortable(),
-                    TextColumn::make('client.full_name')
+                TextColumn::make('client.full_name')
                     ->label('Supplier')
                     ->sortable()
-                    ->searchable(), 
-             TextColumn::make('type')   // <-- added type column
+                    ->searchable(),
+                TextColumn::make('type')
                     ->searchable()
-                    ->sortable(),        
-
+                    ->sortable(),
                 TextColumn::make('item')
                     ->searchable(),
-
                 TextColumn::make('received')
+                    ->label('Received (kg)')
                     ->numeric()
                     ->sortable(),
-
                 TextColumn::make('rejected')
+                    ->label('Rejected (kg)')
                     ->numeric()
                     ->sortable(),
-
                 TextColumn::make('quantity_in')
-                    ->label('Net Quantity In')
+                    ->label('Net In (kg)')
                     ->numeric()
-                    ->sortable(),
-
+                    ->sortable()
+                    ->badge()
+                    ->color(fn ($state) => $state > 0 ? 'success' : 'danger'),
                 TextColumn::make('batch_number')
+                    ->label('Batch')
                     ->searchable(),
-
                 TextColumn::make('employee.full_name')
                     ->label('Employee')
                     ->sortable()
                     ->searchable(),
-
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-
                 TextColumn::make('updated_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-->defaultSort('created_at', 'desc')
+            ->defaultSort('created_at', 'desc')
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()->slideOver(),
+                Tables\Actions\EditAction::make()->slideOver(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -178,9 +202,6 @@ Forms\Components\TextInput::make('item')
     {
         return [
             'index' => Pages\ListRawMaterialStocks::route('/'),
-            'create' => Pages\CreateRawMaterialStock::route('/create'),
-            'view' => Pages\ViewRawMaterialStock::route('/{record}'),
-            'edit' => Pages\EditRawMaterialStock::route('/{record}/edit'),
         ];
     }
 }

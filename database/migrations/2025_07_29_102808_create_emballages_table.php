@@ -18,7 +18,7 @@ return new class extends Migration
             ->constrained('millings')
             ->cascadeOnDelete();
             $table->string('item');
-             $table->string('box')->nullable()->after('item');
+             $table->string('box')->nullable();
             $table->foreignId('raw_material_stock_id') // <-- link batch directly
         ->nullable()
         ->constrained('raw_material_stocks')

@@ -20,102 +20,118 @@ class SaleResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\DatePicker::make('date')->required(),
-
-            Forms\Components\TextInput::make('item')
-                ->label('Product Name')
-                ->required()
-                ->maxLength(255),
-
-            Forms\Components\Repeater::make('batches')
-                ->label('Batches')
+            Forms\Components\Section::make('Sale Information')
+                ->columns(2)
                 ->schema([
-                    Forms\Components\Select::make('emballage_id')
-                        ->label('Packaging Batch')
-                        ->options(fn() => Emballage::with('milling')
-                            ->where('item', '>', 0)
-                            ->get()
-                            ->mapWithKeys(fn ($emb) => [
-                                $emb->id => "Batch: " . ($emb->packaging_batch_id ?? '—')
-                                    . " | Type: " . strtoupper($emb->packaging_type ?? '—')
-                                    . " | Stock: {$emb->item} units"
-                                    . " | Price: " . number_format($emb->unit_price ?? 0) . " RWF"
-                            ])
-                            ->toArray())
+                    Forms\Components\DatePicker::make('date')
+                        ->required()
+                        ->native(false)
+                        ->displayFormat('d/m/Y'),
+
+                    Forms\Components\TextInput::make('item')
+                        ->label('Product Name')
+                        ->required()
+                        ->maxLength(255),
+
+                    Forms\Components\Select::make('client_id')
+                        ->relationship('client', 'full_name')
+                        ->label('Client')
                         ->searchable()
-                        ->required()
-                        ->reactive()
+                        ->preload()
+                        ->required(),
+
+                    Forms\Components\Select::make('employee_id')
+                        ->relationship('employee', 'full_name')
+                        ->label('Sales Employee')
+                        ->searchable()
+                        ->preload()
+                        ->required(),
+                ]),
+
+            Forms\Components\Section::make('Batches Sold')
+                ->schema([
+                    Forms\Components\Repeater::make('batches')
+                        ->label('')
+                        ->schema([
+                            Forms\Components\Select::make('emballage_id')
+                                ->label('Packaging Batch')
+                                ->options(fn () => Emballage::with('milling')
+                                    ->where('item', '>', 0)
+                                    ->get()
+                                    ->mapWithKeys(fn ($emb) => [
+                                        $emb->id => "Batch: " . ($emb->packaging_batch_id ?? '—')
+                                            . " | Type: " . strtoupper($emb->packaging_type ?? '—')
+                                            . " | Stock: {$emb->item} units"
+                                            . " | Price: " . number_format($emb->unit_price ?? 0) . " RWF",
+                                    ])
+                                    ->toArray())
+                                ->searchable()
+                                ->required()
+                                ->live()
+                                ->afterStateUpdated(function ($state, callable $set) {
+                                    if ($state) {
+                                        $emb = Emballage::find($state);
+                                        if ($emb) {
+                                            $set('unit_price', $emb->unit_price);
+                                            $set('line_total', $emb->unit_price);
+                                        }
+                                    }
+                                }),
+
+                            Forms\Components\TextInput::make('quantity')
+                                ->label('Quantity')
+                                ->numeric()
+                                ->minValue(1)
+                                ->required()
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                    $set('line_total', (float) $get('unit_price') * (int) $state);
+                                }),
+
+                            Forms\Components\TextInput::make('unit_price')
+                                ->label('Unit Price (RWF)')
+                                ->numeric()
+                                ->required()
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                    $set('line_total', (float) $state * (int) ($get('quantity') ?? 1));
+                                }),
+
+                            Forms\Components\TextInput::make('line_total')
+                                ->label('Line Total (RWF)')
+                                ->numeric()
+                                ->readOnly()
+                                ->dehydrated(),
+                        ])
+                        ->columns(4)
+                        ->live()
                         ->afterStateUpdated(function ($state, callable $set) {
-                            if ($state) {
-                                $emb = Emballage::find($state);
-                                if ($emb) {
-                                    $set('unit_price', $emb->unit_price);
-                                    $set('line_total', $emb->unit_price);
-                                }
-                            }
-                        }),
-
-                    Forms\Components\TextInput::make('quantity')
-                        ->numeric()
-                        ->minValue(1)
+                            $set('total_price', collect($state)->sum(fn ($b) => $b['line_total'] ?? 0));
+                        })
                         ->required()
-                        ->reactive()
-                        ->afterStateUpdated(function ($state, callable $set, callable $get) {
-                            $price = (float) $get('unit_price');
-                            $set('line_total', $price * (int) $state);
-                        }),
+                        ->dehydrated(),
+                ]),
 
-                    Forms\Components\TextInput::make('unit_price')
+            Forms\Components\Section::make('Totals & Returns')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\TextInput::make('total_price')
+                        ->label('Total Price (RWF)')
                         ->numeric()
-                        ->required()
-                        ->reactive()
-                        ->afterStateUpdated(function ($state, callable $set, callable $get) {
-                            $quantity = (int) $get('quantity') ?? 1;
-                            $set('line_total', $state * $quantity);
-                        }),
+                        ->readOnly()
+                        ->dehydrated()
+                        ->required(),
 
-                    Forms\Components\TextInput::make('line_total')
+                    Forms\Components\TextInput::make('returned')
+                        ->label('Returned Quantity')
                         ->numeric()
-                        ->disabled()
-                        ->dehydrated(), // save line_total
-                ])
-                ->columns(4)
-                ->reactive()
-                ->afterStateUpdated(function ($state, callable $set) {
-                    $total = collect($state)->sum(fn ($b) => $b['line_total'] ?? 0);
-                    $set('total_price', $total);
-                })
-                ->required()
-                ->columnSpanFull()
-                ->dehydrated(), // save repeater as JSON
+                        ->default(0),
 
-            Forms\Components\TextInput::make('total_price')
-                ->numeric()
-                ->disabled()
-                ->dehydrated()
-                ->required(),
-
-            Forms\Components\Select::make('client_id')
-                ->relationship('client', 'full_name')
-                ->searchable()
-                ->preload()
-                ->required(),
-
-            Forms\Components\Select::make('employee_id')
-                ->relationship('employee', 'full_name')
-                ->searchable()
-                ->preload()
-                ->required(),
-
-            Forms\Components\TextInput::make('returned')
-                ->label('Returned Quantity')
-                ->numeric()
-                ->default(0),
-
-            Forms\Components\TextInput::make('reason')
-                ->label('Reason for Return')
-                ->maxLength(255)
-                ->nullable(),
+                    Forms\Components\TextInput::make('reason')
+                        ->label('Reason for Return')
+                        ->maxLength(255)
+                        ->columnSpan(2),
+                ]),
         ]);
     }
 
@@ -123,24 +139,24 @@ class SaleResource extends Resource
     {
         return $table->columns([
             Tables\Columns\TextColumn::make('date')->date()->sortable(),
-               Tables\Columns\TextColumn::make('client.full_name')->label('Client')->sortable()->searchable(),
+            Tables\Columns\TextColumn::make('client.full_name')->label('Client')->sortable()->searchable(),
             Tables\Columns\TextColumn::make('item')->label('Product')->searchable(),
-            Tables\Columns\TextColumn::make('total_price')->numeric()->sortable(),
-
-
-
-         
+            Tables\Columns\TextColumn::make('total_price')
+                ->label('Total (RWF)')
+                ->numeric()
+                ->sortable()
+                ->money('RWF'),
             Tables\Columns\TextColumn::make('employee.full_name')->label('Employee')->sortable()->searchable(),
-            Tables\Columns\TextColumn::make('returned')->numeric()->sortable(),
-            Tables\Columns\TextColumn::make('reason')->searchable(),
-            Tables\Columns\TextColumn::make('created_at')->dateTime()->sortable(),
-            Tables\Columns\TextColumn::make('updated_at')->dateTime()->sortable(),
+            Tables\Columns\TextColumn::make('returned')
+                ->numeric()
+                ->sortable()
+                ->toggleable(),
+            Tables\Columns\TextColumn::make('created_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
         ])
         ->defaultSort('created_at', 'desc')
-        ->filters([])
         ->actions([
-            Tables\Actions\ViewAction::make(),
-            Tables\Actions\EditAction::make(),
+            Tables\Actions\ViewAction::make()->slideOver(),
+            Tables\Actions\EditAction::make()->slideOver(),
         ])
         ->bulkActions([
             Tables\Actions\BulkActionGroup::make([
@@ -158,9 +174,6 @@ class SaleResource extends Resource
     {
         return [
             'index' => Pages\ListSales::route('/'),
-            'create' => Pages\CreateSale::route('/create'),
-            'view' => Pages\ViewSale::route('/{record}'),
-            'edit' => Pages\EditSale::route('/{record}/edit'),
         ];
     }
 }

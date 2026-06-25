@@ -23,32 +23,50 @@ class SortingResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\DatePicker::make('date')
-                    ->required(),
+                Forms\Components\Section::make('Sorting Details')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\DatePicker::make('date')
+                            ->required()
+                            ->native(false)
+                            ->displayFormat('d/m/Y'),
 
-                // Select batch from raw_material_stocks
-                BelongsToSelect::make('raw_material_stock_id')
-                ->label('Batch (Item - Batch Number)')
-                ->relationship('rawMaterialStock', 'batch_number')
-                ->getOptionLabelFromRecordUsing(function (\App\Models\RawMaterialStock $record) {
-                    return "{$record->item} - {$record->batch_number} (Available: {$record->quantity_in} kg)";
-                })
-                ->searchable()
-                ->required(),
-                Forms\Components\TextInput::make('quantity_in')
-                    ->label('Quantity ')
-                    ->required()
-                    ->numeric(),
+                        BelongsToSelect::make('raw_material_stock_id')
+                            ->label('Source Batch')
+                            ->relationship(
+                                'rawMaterialStock',
+                                'batch_number',
+                                fn ($query) => $query->where('quantity_in', '>', 0),
+                            )
+                            ->getOptionLabelFromRecordUsing(function (RawMaterialStock $record) {
+                                return "{$record->item} — {$record->batch_number} (Available: {$record->quantity_in} kg)";
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->required(),
 
-                Forms\Components\TextInput::make('loss')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
+                        Forms\Components\TextInput::make('quantity_in')
+                            ->label('Quantity to Sort (kg)')
+                            ->required()
+                            ->numeric()
+                            ->minValue(0.01),
 
-                BelongsToSelect::make('employee_id')
-                    ->relationship('employee', 'full_name')
-                    ->searchable()
-                    ->required(),
+                        Forms\Components\TextInput::make('loss')
+                            ->label('Loss / Waste (kg)')
+                            ->required()
+                            ->numeric()
+                            ->default(0)
+                            ->minValue(0)
+                            ->helperText('Quantity that cannot be used after sorting'),
+
+                        BelongsToSelect::make('employee_id')
+                            ->relationship('employee', 'full_name')
+                            ->label('Responsible Employee')
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->columnSpan(2),
+                    ]),
             ]);
     }
 
@@ -59,43 +77,39 @@ class SortingResource extends Resource
                 TextColumn::make('date')
                     ->date()
                     ->sortable(),
-
                 TextColumn::make('rawMaterialStock.item')
                     ->label('Item')
                     ->searchable(),
-
                 TextColumn::make('rawMaterialStock.batch_number')
-                    ->label('Batch Number')
+                    ->label('Batch')
                     ->searchable(),
-
                 TextColumn::make('quantity_in')
-                    ->label('Quantity ')
+                    ->label('Qty In (kg)')
                     ->numeric()
                     ->sortable(),
-
                 TextColumn::make('loss')
+                    ->label('Loss (kg)')
                     ->numeric()
                     ->sortable(),
-
+                TextColumn::make('quantity_out')
+                    ->label('Available (kg)')
+                    ->getStateUsing(fn ($record) => max((float) $record->quantity_in - (float) ($record->loss ?? 0), 0))
+                    ->numeric()
+                    ->badge()
+                    ->color(fn ($state) => $state > 0 ? 'success' : 'danger'),
                 TextColumn::make('employee.full_name')
                     ->label('Employee')
                     ->sortable()
                     ->searchable(),
-
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
-->defaultSort('created_at', 'desc')
+            ->defaultSort('created_at', 'desc')
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()->slideOver(),
+                Tables\Actions\EditAction::make()->slideOver(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -113,9 +127,6 @@ class SortingResource extends Resource
     {
         return [
             'index' => Pages\ListSortings::route('/'),
-            'create' => Pages\CreateSorting::route('/create'),
-            'view' => Pages\ViewSorting::route('/{record}'),
-            'edit' => Pages\EditSorting::route('/{record}/edit'),
         ];
     }
 }

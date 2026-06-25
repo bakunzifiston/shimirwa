@@ -1,18 +1,19 @@
-@extends('layouts.admin')
+﻿@extends('layouts.admin')
 
 @section('title', 'Users')
 @section('page_title', 'Users')
 @section('page_subtitle', 'System access accounts')
 
 @section('content')
+    <x-admin.page-stats :stats="$pageStats" />
     <x-admin.listing
         :paginator="$users"
         :search="$search"
         :clear-route="route('admin.users.index')"
-        placeholder="Search users…"
+        placeholder="Search usersâ€¦"
     >
         <x-slot:actions>
-            <a href="{{ route('admin.users.create') }}" class="admin-btn admin-btn-primary admin-btn-sm">
+            <a href="{{ route('admin.users.create') }}" data-drawer-src="{{ route('admin.users.create') }}" data-drawer-title="Add" class="admin-btn admin-btn-primary admin-btn-sm">
                 <x-admin.icon name="plus" class="!h-4 !w-4" />
                 Add user
             </a>
@@ -31,6 +32,7 @@
                     <x-admin.row-actions
                         :view-route="route('admin.users.show', $user)"
                         :edit-route="route('admin.users.edit', $user)"
+                        :delete-route="route('admin.users.destroy', $user)"
                     />
                 </td>
             </tr>
@@ -39,3 +41,4 @@
         @endforelse
     </x-admin.listing>
 @endsection
+

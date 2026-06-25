@@ -21,86 +21,75 @@ class ClientResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('full_name')
-                    ->required()
-                    ->maxLength(255),
+                Forms\Components\Section::make('Contact Information')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\TextInput::make('full_name')
+                            ->label('Full Name / Company')
+                            ->required()
+                            ->maxLength(255),
 
-Forms\Components\Select::make('client_type')
-    ->label('Client Type')
-    ->required()
-    ->options([
-        'Individual'  => 'Individual',
-        'School'      => 'School',
-        'Retailer'    => 'Retailer',
-        'Wholesaler'  => 'Wholesaler',
-        'Institution' => 'Institution',
-        'Companies'   => 'Companies',
-    ])
-    ->searchable() // optional, allows typing to filter options
-    ->default('Individual'), // optional default
+                        Forms\Components\Select::make('role')
+                            ->label('Role')
+                            ->required()
+                            ->options([
+                                'client'   => 'Client',
+                                'supplier' => 'Supplier',
+                            ])
+                            ->live(),
 
-                Forms\Components\Select::make('role')
-                    ->required()
-                    ->options([
-                        'client' => 'Client',
-                        'supplier' => 'Supplier',
-                    ])
-                    ->reactive(),
+                        Forms\Components\Select::make('client_type')
+                            ->label('Client Type')
+                            ->options([
+                                'Individual'  => 'Individual',
+                                'School'      => 'School',
+                                'Retailer'    => 'Retailer',
+                                'Wholesaler'  => 'Wholesaler',
+                                'Institution' => 'Institution',
+                                'Companies'   => 'Companies',
+                            ])
+                            ->searchable()
+                            ->default('Individual'),
 
-                Forms\Components\TextInput::make('supplier_code')
-                    ->maxLength(255)
-                    ->nullable()
-                    ->visible(fn (callable $get) => $get('role') === 'supplier')
-                    ->required(fn (callable $get) => $get('role') === 'supplier')
-                    ->unique(Client::class, 'supplier_code', ignoreRecord: true),
+                        Forms\Components\TextInput::make('supplier_code')
+                            ->label('Supplier Code')
+                            ->maxLength(255)
+                            ->visible(fn (callable $get) => $get('role') === 'supplier')
+                            ->required(fn (callable $get) => $get('role') === 'supplier')
+                            ->unique(Client::class, 'supplier_code', ignoreRecord: true),
 
-                Forms\Components\TextInput::make('phone')
-                    ->tel()
-                    ->maxLength(255)
-                    ->nullable(),
+                        Forms\Components\TextInput::make('phone')
+                            ->label('Phone')
+                            ->tel()
+                            ->maxLength(255),
 
-                Forms\Components\TextInput::make('email')
-                    ->email()
-                    ->maxLength(255)
-                    ->nullable(),
+                        Forms\Components\TextInput::make('email')
+                            ->label('Email')
+                            ->email()
+                            ->maxLength(255),
+                    ]),
 
-Forms\Components\Select::make('district')
-    ->label('District')
-    ->required()
-    ->options([
-        'Bugesera'     => 'Bugesera',
-        'Gatsibo'      => 'Gatsibo',
-        'Kayonza'      => 'Kayonza',
-        'Kirehe'       => 'Kirehe',
-        'Ngoma'        => 'Ngoma',
-        'Nyagatare'    => 'Nyagatare',
-        'Rwamagana'    => 'Rwamagana',
-        'Gasabo'       => 'Gasabo',
-        'Kicukiro'     => 'Kicukiro',
-        'Nyarugenge'   => 'Nyarugenge',
-        'Burera'       => 'Burera',
-        'Gakenke'      => 'Gakenke',
-        'Gicumbi'      => 'Gicumbi',
-        'Musanze'      => 'Musanze',
-        'Rulindo'      => 'Rulindo',
-        'Gisagara'     => 'Gisagara',
-        'Huye'         => 'Huye',
-        'Kamonyi'      => 'Kamonyi',
-        'Muhanga'      => 'Muhanga',
-        'Nyamagabe'    => 'Nyamagabe',
-        'Nyanza'       => 'Nyanza',
-        'Nyaruguru'    => 'Nyaruguru',
-        'Ruhango'      => 'Ruhango',
-        'Karongi'      => 'Karongi',
-        'Ngororero'    => 'Ngororero',
-        'Nyabihu'      => 'Nyabihu',
-        'Nyamasheke'   => 'Nyamasheke',
-        'Rubavu'       => 'Rubavu',
-        'Rusizi'       => 'Rusizi',
-        'Rutsiro'      => 'Rutsiro',
-    ])
-    ->searchable()
-    ->placeholder('Select a district'),
+                Forms\Components\Section::make('Location')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\Select::make('district')
+                            ->label('District')
+                            ->required()
+                            ->options([
+                                'Bugesera' => 'Bugesera', 'Gatsibo' => 'Gatsibo', 'Kayonza' => 'Kayonza',
+                                'Kirehe' => 'Kirehe', 'Ngoma' => 'Ngoma', 'Nyagatare' => 'Nyagatare',
+                                'Rwamagana' => 'Rwamagana', 'Gasabo' => 'Gasabo', 'Kicukiro' => 'Kicukiro',
+                                'Nyarugenge' => 'Nyarugenge', 'Burera' => 'Burera', 'Gakenke' => 'Gakenke',
+                                'Gicumbi' => 'Gicumbi', 'Musanze' => 'Musanze', 'Rulindo' => 'Rulindo',
+                                'Gisagara' => 'Gisagara', 'Huye' => 'Huye', 'Kamonyi' => 'Kamonyi',
+                                'Muhanga' => 'Muhanga', 'Nyamagabe' => 'Nyamagabe', 'Nyanza' => 'Nyanza',
+                                'Nyaruguru' => 'Nyaruguru', 'Ruhango' => 'Ruhango', 'Karongi' => 'Karongi',
+                                'Ngororero' => 'Ngororero', 'Nyabihu' => 'Nyabihu', 'Nyamasheke' => 'Nyamasheke',
+                                'Rubavu' => 'Rubavu', 'Rusizi' => 'Rusizi', 'Rutsiro' => 'Rutsiro',
+                            ])
+                            ->searchable()
+                            ->placeholder('Select a district'),
+                    ]),
             ]);
     }
 
@@ -109,39 +98,33 @@ Forms\Components\Select::make('district')
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('full_name')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('client_type')
+                    ->label('Name')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('role')
-                    ->label('Role')
-                    ->sortable()
+                    ->badge()
+                    ->color(fn ($state) => $state === 'supplier' ? 'warning' : 'success')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('client_type')
+                    ->label('Type')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('supplier_code')
                     ->label('Supplier Code')
                     ->searchable()
-                    ->toggleable(), // Hide by default if you want
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('phone')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('email')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('address')
-                    ->searchable(),
+                Tables\Columns\TextColumn::make('district')
+                    ->searchable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->filters([
-                //
-            ])
-->defaultSort('created_at', 'desc')
+            ->defaultSort('created_at', 'desc')
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()->slideOver(),
+                Tables\Actions\EditAction::make()->slideOver(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -152,18 +135,13 @@ Forms\Components\Select::make('district')
 
     public static function getRelations(): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 
     public static function getPages(): array
     {
         return [
             'index' => Pages\ListClients::route('/'),
-            'create' => Pages\CreateClient::route('/create'),
-            'view' => Pages\ViewClient::route('/{record}'),
-            'edit' => Pages\EditClient::route('/{record}/edit'),
         ];
     }
 }

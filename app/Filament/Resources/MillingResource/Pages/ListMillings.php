@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Filament\Resources\MillingResource\Pages;
 
@@ -13,7 +13,9 @@ class ListMillings extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()->slideOver(),
         ];
     }
 }
+
+

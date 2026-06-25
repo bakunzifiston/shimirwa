@@ -1,18 +1,19 @@
-@extends('layouts.admin')
+﻿@extends('layouts.admin')
 
 @section('title', 'Sales')
 @section('page_title', 'Sales')
 @section('page_subtitle', 'Sales and distribution')
 
 @section('content')
+    <x-admin.page-stats :stats="$pageStats" />
     <x-admin.listing
         :paginator="$sales"
         :search="$search"
         :clear-route="route('admin.sales.index')"
-        placeholder="Search sales…"
+        placeholder="Search salesâ€¦"
     >
         <x-slot:actions>
-            <a href="{{ route('admin.sales.create') }}" class="admin-btn admin-btn-primary admin-btn-sm">
+            <a href="{{ route('admin.sales.create') }}" data-drawer-src="{{ route('admin.sales.create') }}" data-drawer-title="Add" class="admin-btn admin-btn-primary admin-btn-sm">
                 <x-admin.icon name="plus" class="!h-4 !w-4" />
                 Add sale
             </a>
@@ -32,6 +33,7 @@
                     <x-admin.row-actions
                         :view-route="route('admin.sales.show', $sale)"
                         :edit-route="route('admin.sales.edit', $sale)"
+                        :delete-route="route('admin.sales.destroy', $sale)"
                     />
                 </td>
             </tr>
@@ -40,3 +42,4 @@
         @endforelse
     </x-admin.listing>
 @endsection
+

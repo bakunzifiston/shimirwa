@@ -26,7 +26,7 @@ class UpdateProductRequest extends FormRequest
             'stock_quantity' => ['required', 'integer', 'min:0'],
             'status' => ['required', Rule::in([Product::STATUS_ACTIVE, Product::STATUS_INACTIVE])],
             'images' => ['nullable', 'array', 'max:10'],
-            'images.*' => ['file', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:5120'],
+            'images.*' => ['file', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:10240'],
             'remove_images' => ['nullable', 'array'],
             'remove_images.*' => ['integer', 'exists:product_images,id'],
         ];

@@ -4,15 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use App\Models\Employee;
+use App\Models\ProductCatalog;
 use App\Models\RawMaterialStock;
 use App\Models\Sorting;
-use App\Models\Employee;
 
 class Roasting extends Model
 {
     use HasFactory;
-
-    protected $afterCommit = true;
 
     protected $casts = [
         'date' => 'date',
@@ -20,8 +20,8 @@ class Roasting extends Model
 
     protected $fillable = [
         'date',
-        'quantity_in',       // total quantity taken from stock
-        'loss',              // how much is wasted
+        'quantity_in',       // full gross input taken from stock
+        'loss',              // waste during roasting
         'batch',
         'chef_id',
         'supervisor_id',
@@ -49,11 +49,15 @@ class Roasting extends Model
         return $this->belongsTo(Sorting::class, 'sorting_id');
     }
 
+    // Usable output after loss — used by Milling to check available stock
+    public function getQuantityOutAttribute(): float
+    {
+        return max((float) $this->quantity_in - (float) ($this->loss ?? 0), 0);
+    }
+
     protected static function booted()
     {
-        // Before creating: check stock availability and adjust stored quantity
         static::creating(function ($roasting) {
-            // Identify source stock (raw material or sorting)
             if ($roasting->raw_material_stock_id) {
                 $stock = RawMaterialStock::find($roasting->raw_material_stock_id);
             } elseif ($roasting->sorting_id) {
@@ -66,34 +70,55 @@ class Roasting extends Model
                 throw new \Exception('No matching stock found.');
             }
 
-            // Check if enough stock exists to take full quantity_in
-            if ($stock->quantity_in < $roasting->quantity_in) {
+            // Resolve the item name: raw stock has 'item', sorting goes through its rawMaterialStock
+            $itemName = $stock instanceof Sorting
+                ? $stock->rawMaterialStock?->item
+                : $stock->item;
+
+            // Enforce catalog flag: item must be marked as requires_roasting
+            if ($itemName) {
+                $catalogEntry = ProductCatalog::where('name', $itemName)
+                    ->where('category', 'production')
+                    ->first();
+
+                if ($catalogEntry && ! $catalogEntry->requires_roasting) {
+                    throw new \Exception("\"{$itemName}\" is not configured for roasting. Enable \"Requires roasting\" in Settings → Product Catalog.");
+                }
+            }
+
+            // Check against the available quantity (quantity_out for Sorting, quantity_in for RawMaterialStock)
+            $available = $stock instanceof Sorting ? $stock->quantity_out : $stock->quantity_in;
+
+            if ($available < $roasting->quantity_in) {
                 throw new \Exception('Not enough stock available for this roasting.');
             }
 
-            // Store usable quantity (quantity_in - loss)
-            if (!is_null($roasting->loss) && $roasting->loss > 0) {
-                if ($roasting->loss > $roasting->quantity_in) {
-                    throw new \Exception('Loss cannot exceed quantity in.');
-                }
-                // overwrite quantity_in with usable amount
-                $roasting->quantity_in = $roasting->quantity_in - $roasting->loss;
+            if (!is_null($roasting->loss) && $roasting->loss > $roasting->quantity_in) {
+                throw new \Exception('Loss cannot exceed quantity in.');
             }
         });
 
-        // After creating: always deduct full input quantity (before loss) from stock
         static::created(function ($roasting) {
-            $takenAmount = $roasting->quantity_in + $roasting->loss; // full quantity taken from stock
-
             if ($roasting->raw_material_stock_id) {
-                $stock = RawMaterialStock::find($roasting->raw_material_stock_id);
+                DB::table('raw_material_stocks')
+                    ->where('id', $roasting->raw_material_stock_id)
+                    ->decrement('quantity_in', $roasting->quantity_in);
             } elseif ($roasting->sorting_id) {
-                $stock = Sorting::find($roasting->sorting_id);
+                DB::table('sortings')
+                    ->where('id', $roasting->sorting_id)
+                    ->decrement('quantity_in', $roasting->quantity_in);
             }
+        });
 
-            if ($stock) {
-                $stock->quantity_in -= $takenAmount;
-                $stock->save();
+        static::deleted(function ($roasting) {
+            if ($roasting->raw_material_stock_id) {
+                DB::table('raw_material_stocks')
+                    ->where('id', $roasting->raw_material_stock_id)
+                    ->increment('quantity_in', $roasting->quantity_in);
+            } elseif ($roasting->sorting_id) {
+                DB::table('sortings')
+                    ->where('id', $roasting->sorting_id)
+                    ->increment('quantity_in', $roasting->quantity_in);
             }
         });
     }

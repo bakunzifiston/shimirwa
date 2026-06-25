@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Filament\Resources\EmballageResource\Pages;
 
@@ -13,7 +13,9 @@ class ListEmballages extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()->slideOver(),
         ];
     }
 }
+
+

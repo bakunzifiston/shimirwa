@@ -19,12 +19,10 @@ return new class extends Migration
             $table->string('item'); // e.g. flour, maize flour, soy flour
             $table->integer('quantity'); // sold quantity (kg or units)
                $table->integer('returned')
-                  ->default(0)
-                  ->after('quantity'); // how many items were returned
+                  ->default(0);
 
             $table->string('reason')
-                  ->nullable()
-                  ->after('returned'); // reason for return
+                  ->nullable();
         
             // Pricing
             $table->decimal('unit_price', 10, 2)->nullable();

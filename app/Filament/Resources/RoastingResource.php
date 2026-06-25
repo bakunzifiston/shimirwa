@@ -25,88 +25,102 @@ class RoastingResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\DatePicker::make('date')
-                    ->required(),
+                Forms\Components\Section::make('Roasting Details')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\DatePicker::make('date')
+                            ->required()
+                            ->native(false)
+                            ->displayFormat('d/m/Y'),
 
-                // Step 1: Choose source type
-                Select::make('source_type')
-                    ->label('Source')
-                    ->options([
-                        'raw' => 'Raw Material Stock',
-                        'sorting' => 'Sorting Stock',
-                    ])
-                    ->reactive()
-                    ->required(),
+                        Select::make('source_type')
+                            ->label('Source Type')
+                            ->options([
+                                'raw'     => 'Raw Material Stock',
+                                'sorting' => 'Sorting Stock',
+                            ])
+                            ->live()
+                            ->dehydrated(false)
+                            ->required(),
 
-                // Step 2a: Raw Material Stock batch selector
-                BelongsToSelect::make('raw_material_stock_id')
-                    ->label('Batch (Raw Material)')
-                    ->relationship(
-                        'rawMaterialStock',
-                        'batch_number',
-                        fn ($query) => $query->where('quantity_in', '>', 0),
-                    )
-                    ->getOptionLabelFromRecordUsing(function (RawMaterialStock $record) {
-                        return "{$record->item} - {$record->batch_number} (Available: {$record->quantity_in} kg)";
-                    })
-                    ->searchable()
-                    ->preload()
-                    ->visible(fn ($get) => $get('source_type') === 'raw')
-                    ->reactive()
-                    ->afterStateUpdated(function ($state, $set) {
-                        $stock = RawMaterialStock::find($state);
-                        $set('batch', $stock?->batch_number ?? '');
-                    }),
+                        BelongsToSelect::make('raw_material_stock_id')
+                            ->label('Batch (Raw Material)')
+                            ->relationship(
+                                'rawMaterialStock',
+                                'batch_number',
+                                fn ($query) => $query->where('quantity_in', '>', 0),
+                            )
+                            ->getOptionLabelFromRecordUsing(function (RawMaterialStock $record) {
+                                return "{$record->item} — {$record->batch_number} (Available: {$record->quantity_in} kg)";
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->visible(fn ($get) => $get('source_type') === 'raw')
+                            ->live()
+                            ->afterStateUpdated(function ($state, $set) {
+                                $stock = RawMaterialStock::find($state);
+                                $set('batch', $stock?->batch_number ?? '');
+                            }),
 
-                // Step 2b: Sorting batch selector
-                BelongsToSelect::make('sorting_id')
-                    ->label('Batch (Sorting)')
-                    ->relationship(
-                        'sorting',
-                        'id',
-                        fn ($query) => $query->where('quantity_in', '>', 0),
-                    )
-                    ->getOptionLabelFromRecordUsing(function (Sorting $record) {
-                        $stock = $record->rawMaterialStock;
-                        return $stock
-                            ? "{$stock->item} - Batch {$stock->batch_number} (Available: {$record->quantity_in} kg)"
-                            : "Unknown Batch (ID: {$record->id})";
-                    })
-                    ->searchable()
-                    ->preload()
-                    ->visible(fn ($get) => $get('source_type') === 'sorting')
-                    ->reactive()
-                    ->afterStateUpdated(function ($state, $set) {
-                        $sorting = Sorting::find($state);
-                        $set('batch', $sorting?->rawMaterialStock?->batch_number ?? '');
-                    }),
+                        BelongsToSelect::make('sorting_id')
+                            ->label('Batch (Sorting)')
+                            ->relationship(
+                                'sorting',
+                                'id',
+                                fn ($query) => $query->where('quantity_in', '>', 0),
+                            )
+                            ->getOptionLabelFromRecordUsing(function (Sorting $record) {
+                                $stock = $record->rawMaterialStock;
+                                return $stock
+                                    ? "{$stock->item} — Batch {$stock->batch_number} (Available: {$record->quantity_in} kg)"
+                                    : "Sorting Batch #{$record->id}";
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->visible(fn ($get) => $get('source_type') === 'sorting')
+                            ->live()
+                            ->afterStateUpdated(function ($state, $set) {
+                                $sorting = Sorting::find($state);
+                                $set('batch', $sorting?->rawMaterialStock?->batch_number ?? '');
+                            }),
 
-                Forms\Components\TextInput::make('quantity_in')
-                    ->label('Quantity In')
-                    ->required()
-                    ->numeric(),
+                        Forms\Components\TextInput::make('quantity_in')
+                            ->label('Quantity In (kg)')
+                            ->required()
+                            ->numeric()
+                            ->minValue(0.01),
 
-                Forms\Components\TextInput::make('loss')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
+                        Forms\Components\TextInput::make('loss')
+                            ->label('Loss / Waste (kg)')
+                            ->required()
+                            ->numeric()
+                            ->default(0)
+                            ->minValue(0),
 
-                // Auto-filled Batch Number (Read-Only)
-                Forms\Components\TextInput::make('batch')
-                    ->label('Roasting Batch Number')
-                    ->required()
-                    ->maxLength(255),
-                 // prevent manual changes
+                        Forms\Components\TextInput::make('batch')
+                            ->label('Roasting Batch Number')
+                            ->required()
+                            ->maxLength(255)
+                            ->helperText('Auto-filled when you select a source batch'),
+                    ]),
 
-                BelongsToSelect::make('chef_id')
-                    ->relationship('chef', 'full_name')
-                    ->searchable()
-                    ->required(),
+                Forms\Components\Section::make('Staff')
+                    ->columns(2)
+                    ->schema([
+                        BelongsToSelect::make('chef_id')
+                            ->relationship('chef', 'full_name')
+                            ->label('Chef')
+                            ->searchable()
+                            ->preload()
+                            ->required(),
 
-                BelongsToSelect::make('supervisor_id')
-                    ->relationship('supervisor', 'full_name')
-                    ->searchable()
-                    ->required(),
+                        BelongsToSelect::make('supervisor_id')
+                            ->relationship('supervisor', 'full_name')
+                            ->label('Supervisor')
+                            ->searchable()
+                            ->preload()
+                            ->required(),
+                    ]),
             ]);
     }
 
@@ -117,18 +131,23 @@ class RoastingResource extends Resource
                 TextColumn::make('date')
                     ->date()
                     ->sortable(),
-       
-   
-                TextColumn::make('quantity_in')
-                    ->label('Quantity In')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('loss')
-                    ->numeric()
-                    ->sortable(),
                 TextColumn::make('batch')
                     ->label('Roasting Batch')
                     ->searchable(),
+                TextColumn::make('quantity_in')
+                    ->label('Qty In (kg)')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('loss')
+                    ->label('Loss (kg)')
+                    ->numeric()
+                    ->sortable(),
+                TextColumn::make('quantity_out')
+                    ->label('Available (kg)')
+                    ->getStateUsing(fn ($record) => max((float) $record->quantity_in - (float) ($record->loss ?? 0), 0))
+                    ->numeric()
+                    ->badge()
+                    ->color(fn ($state) => $state > 0 ? 'success' : 'danger'),
                 TextColumn::make('chef.full_name')
                     ->label('Chef')
                     ->sortable()
@@ -141,15 +160,11 @@ class RoastingResource extends Resource
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
-->defaultSort('created_at', 'desc')
+            ->defaultSort('created_at', 'desc')
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()->slideOver(),
+                Tables\Actions\EditAction::make()->slideOver(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -167,9 +182,6 @@ class RoastingResource extends Resource
     {
         return [
             'index' => Pages\ListRoastings::route('/'),
-            'create' => Pages\CreateRoasting::route('/create'),
-            'view' => Pages\ViewRoasting::route('/{record}'),
-            'edit' => Pages\EditRoasting::route('/{record}/edit'),
         ];
     }
 }
