@@ -4,6 +4,7 @@ namespace App\Http\Requests\Admin\Emballage;
 
 use App\Models\Milling;
 use App\Models\PackagingCatalog;
+use App\Models\RawMaterialStock;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreEmballageRequest extends FormRequest
@@ -38,6 +39,7 @@ class StoreEmballageRequest extends FormRequest
             'milling_overflow'            => ['sometimes', 'array'],
             'milling_overflow.*.milling_id' => ['required_with:milling_overflow', 'exists:millings,id'],
             'milling_overflow.*.quantity'   => ['required_with:milling_overflow', 'numeric', 'min:0.001'],
+            'inner_stock_id'              => ['nullable', 'exists:raw_material_stocks,id'],
             'item'                        => ['required', 'numeric', 'min:1'],
             'quantity'                    => ['required', 'numeric', 'min:0'],
             'damaged'                     => ['nullable', 'numeric', 'min:0'],
@@ -69,6 +71,34 @@ class StoreEmballageRequest extends FormRequest
                         $validator->errors()->add('milling_id',
                             sprintf('Milling batch %s only has %s kg available (needs %s kg).',
                                 $milling->batch_number, number_format($available, 2), number_format($primaryQty, 2))
+                        );
+                    }
+                }
+            }
+
+            // Validate inner unit stock availability
+            $catalogId    = $this->input('packaging_catalog_id');
+            $innerStockId = $this->input('inner_stock_id');
+            if ($catalogId && $innerStockId) {
+                $catalog = PackagingCatalog::find($catalogId);
+                if ($catalog && $catalog->hasInnerUnits()) {
+                    $itemCount   = (int) $this->input('item', 0);
+                    $totalInner  = $itemCount * $catalog->inner_units_per_package;
+                    $innerStock  = RawMaterialStock::find($innerStockId);
+                    $emballage   = $this->route('emballage');
+                    $avail       = $innerStock ? (float) $innerStock->quantity_in : 0;
+                    if ($emballage && $emballage->inner_stock_id == $innerStockId) {
+                        $avail += $emballage->innerUnitsTotal();
+                    }
+                    if ($totalInner > $avail) {
+                        $validator->errors()->add('inner_stock_id',
+                            sprintf('Batch %s only has %s units; need %s for %d × %s.',
+                                $innerStock->batch_number ?? '?',
+                                number_format($avail),
+                                number_format($totalInner),
+                                $itemCount,
+                                $catalog->name
+                            )
                         );
                     }
                 }

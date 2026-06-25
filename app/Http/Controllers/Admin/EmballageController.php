@@ -112,12 +112,25 @@ class EmballageController extends Controller
             }
         })->orderByDesc('date')->get();
 
+        $packagingCatalogs = PackagingCatalog::active()
+            ->with('innerUnitCatalog')
+            ->orderBy('sort_order')->orderBy('name')->get();
+
+        // For inner unit dropdowns: all packaging stocks with stock > 0, plus the currently linked one
+        $innerLinkedId = $emballage->exists ? $emballage->inner_stock_id : null;
+        $innerStocks   = RawMaterialStock::packagingStaff()
+            ->where(function ($q) use ($innerLinkedId) {
+                $q->where('quantity_in', '>', 0);
+                if ($innerLinkedId) $q->orWhere('id', $innerLinkedId);
+            })->orderByDesc('date')->get();
+
         return [
             'emballage'        => $emballage,
             'packagingStocks'  => RawMaterialStock::packagingStaff()->where('quantity_in', '>', 0)->orderByDesc('date')->get(),
+            'innerStocks'      => $innerStocks,
             'millings'         => $millings,
             'employees'        => Employee::orderBy('full_name')->get(),
-            'packagingCatalogs'=> PackagingCatalog::active()->orderBy('sort_order')->orderBy('name')->get(),
+            'packagingCatalogs'=> $packagingCatalogs,
         ];
     }
 }

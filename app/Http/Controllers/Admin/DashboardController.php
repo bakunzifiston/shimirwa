@@ -113,6 +113,16 @@ class DashboardController extends Controller
         }
         $dailyLabels = collect(range(1, $daysInMonth))->map(fn($d) => (string)$d);
 
+        // ── Chart data bundle (used by admin-dashboard.js) ────────────────────
+        $chartData = [
+            'monthlyRevenue'  => $monthlyRevenue,
+            'monthlyPackaging'=> $monthlyPackaging,
+            'pipelineDonut'   => $pipelineDonut,
+            'dailyLabels'     => $dailyLabels,
+            'dailyPackaging'  => $dailyPackaging,
+            'dailySales'      => $dailySales,
+        ];
+
         // ── Recent activity ───────────────────────────────────────────────────
         $recentSales = Sale::with(['client', 'employee'])
             ->latest('date')->latest('id')->limit(5)->get();
@@ -136,7 +146,8 @@ class DashboardController extends Controller
             'todayMillings', 'todayPackagings', 'todaySales', 'todayRevenue',
             'monthRevenue', 'lastMonthRevenue', 'revenueGrowth',
             'monthlyRevenue', 'monthlyPackaging', 'pipelineDonut', 'totalLoss',
-            'dailyLabels', 'dailyPackaging', 'dailySales'
+            'dailyLabels', 'dailyPackaging', 'dailySales',
+            'chartData'
         ));
     }
 }

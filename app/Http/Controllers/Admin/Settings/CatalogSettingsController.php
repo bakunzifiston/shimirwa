@@ -23,6 +23,7 @@ class CatalogSettingsController extends Controller
             ->withQueryString();
 
         $packagingItems = PackagingCatalog::query()
+            ->with('innerUnitCatalog')
             ->when($search && $tab === 'packaging', fn ($q) => $q->where('name', 'like', "%{$search}%"))
             ->orderBy('sort_order')->orderBy('name')
             ->paginate(20, ['*'], 'pkg_page')

@@ -34,12 +34,19 @@
             </dl>
 
             @if(is_array($sale->batches) && count($sale->batches))
+                @php
+                    $embIds = collect($sale->batches)->pluck('emballage_id')->filter()->all();
+                    $embMap = \App\Models\Emballage::with(['packagingCatalog.innerUnitCatalog'])
+                        ->whereIn('id', $embIds)->get()->keyBy('id');
+                @endphp
                 <h3 class="mt-6 text-sm font-semibold uppercase tracking-wide" style="color: var(--admin-text-muted)">Line items</h3>
                 <div class="admin-table-scroll mt-3 rounded-lg border" style="border-color: var(--admin-border)">
                     <table class="admin-table">
                         <thead>
                             <tr>
-                                <th>Packaging #</th>
+                                <th>Packaging batch</th>
+                                <th>Type</th>
+                                <th>Inner units</th>
                                 <th>Qty</th>
                                 <th>Unit price</th>
                                 <th>Line total</th>
@@ -47,8 +54,26 @@
                         </thead>
                         <tbody>
                             @foreach ($sale->batches as $batch)
+                                @php
+                                    $emb     = $embMap[$batch['emballage_id'] ?? null] ?? null;
+                                    $catName = $emb?->packagingCatalog?->name ?? strtoupper($emb?->packaging_type ?? '—');
+                                    $inner   = '';
+                                    if ($emb?->packagingCatalog?->hasInnerUnits()) {
+                                        $perPkg    = $emb->packagingCatalog->inner_units_per_package;
+                                        $innerName = $emb->packagingCatalog->innerUnitCatalog?->name ?? 'inner';
+                                        $inner = "{$perPkg} × {$innerName}";
+                                    }
+                                @endphp
                                 <tr>
-                                    <td class="cell-primary">#{{ $batch['emballage_id'] ?? '—' }}</td>
+                                    <td class="cell-primary">{{ $emb?->packaging_batch_id ?? '#'.($batch['emballage_id'] ?? '—') }}</td>
+                                    <td>{{ $catName }}</td>
+                                    <td>
+                                        @if($inner)
+                                            <span class="text-xs font-semibold px-1.5 py-0.5 rounded" style="background:#fef9c3;color:#854d0e">{{ $inner }}</span>
+                                        @else
+                                            <span style="color:var(--admin-text-subtle)">—</span>
+                                        @endif
+                                    </td>
                                     <td>{{ $batch['quantity'] ?? 0 }}</td>
                                     <td>{{ number_format($batch['unit_price'] ?? 0, 0) }} RWF</td>
                                     <td>{{ number_format($batch['line_total'] ?? 0, 0) }} RWF</td>

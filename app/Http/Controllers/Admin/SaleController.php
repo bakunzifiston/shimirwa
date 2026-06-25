@@ -27,6 +27,13 @@ class SaleController extends Controller
             ->paginate(15)
             ->withQueryString();
 
+        // Bulk-load emballages for all batch references so the index view doesn't N+1
+        $allEmbIds = $sales->flatMap(fn ($s) => collect($s->batches ?? [])->pluck('emballage_id'))->filter()->unique()->values()->all();
+        $embMap    = Emballage::with(['packagingCatalog.innerUnitCatalog'])
+            ->whereIn('id', $allEmbIds)->get()->keyBy('id');
+        // Attach resolved emballages map to each sale as a dynamic property
+        $sales->each(fn ($s) => $s->resolvedEmballages = $embMap);
+
         $today        = Sale::whereDate('date', today())->count();
         $thisMonth    = Sale::whereMonth('date', now()->month)->whereYear('date', now()->year)->count();
         $lastMonth    = Sale::whereMonth('date', now()->subMonth()->month)->whereYear('date', now()->subMonth()->year)->count();
@@ -105,7 +112,7 @@ class SaleController extends Controller
             'sale' => $sale,
             'clients' => Client::where('role', 'client')->orderBy('full_name')->get(),
             'employees' => Employee::orderBy('full_name')->get(),
-            'emballages' => Emballage::with('milling')
+            'emballages' => Emballage::with(['milling', 'packagingCatalog.innerUnitCatalog'])
                 ->where(function ($query) use ($includeEmballageIds) {
                     $query->where('item', '>', 0);
                     if ($includeEmballageIds !== []) {

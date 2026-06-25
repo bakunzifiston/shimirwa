@@ -24,6 +24,7 @@ class Emballage extends Model
         'milling_overflow',        // [{milling_id, quantity}, ...] overflow draws
         'packaging_catalog_id',   // FK → packaging_catalogs
         'raw_material_stock_id',
+        'inner_stock_id',          // FK → raw_material_stocks (inner units, e.g. bags inside a box)
         'item',
         'packaging_type',          // kept for legacy display; new records use catalog
         'quantity',
@@ -60,6 +61,11 @@ class Emballage extends Model
         return $this->belongsTo(RawMaterialStock::class);
     }
 
+    public function innerStock()
+    {
+        return $this->belongsTo(RawMaterialStock::class, 'inner_stock_id');
+    }
+
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
@@ -93,6 +99,20 @@ class Emballage extends Model
             'sack' => 0,
             default => 1,
         };
+    }
+
+    /**
+     * How many inner units to deduct from inner_stock when this emballage is created.
+     * e.g. 10 boxes × 12 bags/box = 120 bags
+     */
+    public function innerUnitsTotal(): int
+    {
+        if (!$this->packaging_catalog_id) return 0;
+        $catalog = $this->relationLoaded('packagingCatalog')
+            ? $this->packagingCatalog
+            : PackagingCatalog::find($this->packaging_catalog_id);
+        if (!$catalog || !$catalog->hasInnerUnits()) return 0;
+        return (int) $this->item * (int) $catalog->inner_units_per_package;
     }
 
     protected static function failMillingFlourAvailability(string $message): never
@@ -158,11 +178,18 @@ class Emballage extends Model
         static::created(function (Emballage $emballage) {
             $item = (float) ($emballage->item ?? 0);
 
-            // Deduct packaging materials
+            // Deduct packaging materials (outer: e.g. boxes)
             if ($emballage->rawMaterialStock) {
                 \DB::table('raw_material_stocks')
                     ->where('id', $emballage->raw_material_stock_id)
                     ->decrement('quantity_in', $item);
+            }
+            // Deduct inner units (e.g. bags inside boxes)
+            $innerUnits = $emballage->innerUnitsTotal();
+            if ($innerUnits > 0 && $emballage->inner_stock_id) {
+                \DB::table('raw_material_stocks')
+                    ->where('id', $emballage->inner_stock_id)
+                    ->decrement('quantity_in', $innerUnits);
             }
             // Deduct flour from primary milling batch
             if ($emballage->milling_id && (float) $emballage->quantity > 0) {
@@ -227,11 +254,47 @@ class Emballage extends Model
                 }
             }
 
-            // Adjust packaging material stocks
+            // Adjust packaging material stocks (outer)
             if ($emballage->raw_material_stock_id && $diffItem != 0) {
                 \DB::table('raw_material_stocks')
                     ->where('id', $emballage->raw_material_stock_id)
                     ->decrement('quantity_in', $diffItem);
+            }
+
+            // Adjust inner units when item count or inner_stock_id changes
+            $oldInnerStockId = $emballage->getOriginal('inner_stock_id');
+            $newInnerStockId = $emballage->inner_stock_id;
+            $oldItem         = (float) $emballage->getOriginal('item');
+            $innerUnitsOld   = 0;
+            $innerUnitsNew   = 0;
+
+            // Compute old inner units
+            if ($oldInnerStockId) {
+                $oldCatalogId = $emballage->getOriginal('packaging_catalog_id');
+                $oldCatalog   = PackagingCatalog::find($oldCatalogId);
+                if ($oldCatalog && $oldCatalog->hasInnerUnits()) {
+                    $innerUnitsOld = (int) $oldItem * (int) $oldCatalog->inner_units_per_package;
+                }
+            }
+            // Compute new inner units
+            if ($newInnerStockId) {
+                $innerUnitsNew = $emballage->innerUnitsTotal();
+            }
+
+            if ($emballage->isDirty('inner_stock_id') && $oldInnerStockId !== $newInnerStockId) {
+                // Stock changed — restore old, deduct new
+                if ($oldInnerStockId && $innerUnitsOld > 0) {
+                    \DB::table('raw_material_stocks')->where('id', $oldInnerStockId)->increment('quantity_in', $innerUnitsOld);
+                }
+                if ($newInnerStockId && $innerUnitsNew > 0) {
+                    \DB::table('raw_material_stocks')->where('id', $newInnerStockId)->decrement('quantity_in', $innerUnitsNew);
+                }
+            } elseif ($newInnerStockId && $innerUnitsNew !== $innerUnitsOld) {
+                // Same stock, count changed
+                $diff = $innerUnitsNew - $innerUnitsOld;
+                if ($diff != 0) {
+                    \DB::table('raw_material_stocks')->where('id', $newInnerStockId)->decrement('quantity_in', $diff);
+                }
             }
             // Adjust flour — primary batch
             if ($emballage->isDirty('milling_id')) {
@@ -272,10 +335,18 @@ class Emballage extends Model
         static::deleted(function (Emballage $emballage) {
             $item = (float) ($emballage->item ?? 0);
 
+            // Restore outer packaging material
             if ($emballage->raw_material_stock_id && $item > 0) {
                 \DB::table('raw_material_stocks')
                     ->where('id', $emballage->raw_material_stock_id)
                     ->increment('quantity_in', $item);
+            }
+            // Restore inner units (e.g. bags that were inside boxes)
+            $innerUnits = $emballage->innerUnitsTotal();
+            if ($innerUnits > 0 && $emballage->inner_stock_id) {
+                \DB::table('raw_material_stocks')
+                    ->where('id', $emballage->inner_stock_id)
+                    ->increment('quantity_in', $innerUnits);
             }
             // Restore flour to primary milling batch
             if ($emballage->milling_id && (float) $emballage->quantity > 0) {

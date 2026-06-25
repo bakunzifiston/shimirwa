@@ -139,6 +139,7 @@
                 <tr>
                     <th>Name</th>
                     <th class="text-right">kg / unit</th>
+                    <th>Inner units</th>
                     <th class="text-center">Manual weight</th>
                     <th>Description</th>
                     <th>Status</th>
@@ -151,6 +152,14 @@
                     <td class="cell-primary">{{ $catalog->name }}</td>
                     <td class="text-right font-mono font-semibold">
                         {{ $catalog->manual_weight ? '—' : number_format($catalog->kg_per_unit, 3) }}
+                    </td>
+                    <td class="text-sm">
+                        @if ($catalog->hasInnerUnits())
+                            <span class="font-semibold" style="color:var(--admin-primary)">{{ $catalog->inner_units_per_package }} ×</span>
+                            <span>{{ $catalog->innerUnitCatalog?->name ?? '—' }}</span>
+                        @else
+                            <span style="color:var(--admin-text-subtle)">—</span>
+                        @endif
                     </td>
                     <td class="text-center">
                         @if ($catalog->manual_weight)
@@ -179,7 +188,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="6" class="py-10 text-center" style="color:var(--admin-text-muted)">
+                    <td colspan="7" class="py-10 text-center" style="color:var(--admin-text-muted)">
                         No packaging types yet. Add your first type above.
                     </td>
                 </tr>

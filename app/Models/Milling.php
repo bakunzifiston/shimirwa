@@ -96,24 +96,17 @@ class Milling extends Model
         return [];
     }
 
-    protected static function resolveBatch(array $item): Roasting|Sorting|null
-    {
-        $source  = $item['source']   ?? null;
-        $stockId = $item['stock_id'] ?? null;
-        if (!$source || !$stockId) return null;
-        return $source === 'roasting' ? Roasting::find($stockId) : Sorting::find($stockId);
-    }
-
     protected static function booted()
     {
         static::creating(function ($milling) {
             $total = 0;
             foreach ($milling->items ?? [] as $item) {
-                $qty = floatval($item['quantity'] ?? 0);
-                if (!$qty) continue;
-                $batch = self::resolveBatch($item);
-                if (!$batch) throw new \Exception("Selected batch does not exist.");
-                $avail = $batch->quantity_out; // net output after loss, same accessor on both Roasting and Sorting
+                $qty    = floatval($item['quantity'] ?? 0);
+                $type   = $item['type']     ?? '';
+                $stockId = (int) ($item['stock_id'] ?? 0);
+                if (!$qty || !$type || !$stockId) continue;
+                $batch = self::resolveBatch($type, $stockId);
+                $avail = $batch->remainingUsable();
                 if ($avail < $qty) throw new \Exception("Not enough stock in batch. Available: {$avail} kg.");
                 $total += $qty;
             }
@@ -123,13 +116,15 @@ class Milling extends Model
 
         static::created(function ($milling) {
             foreach ($milling->items ?? [] as $item) {
-                $qty   = floatval($item['quantity'] ?? 0);
-                $batch = self::resolveBatch($item);
-                if ($batch && $qty) {
-                    \DB::table($item['source'] === 'roasting' ? 'roastings' : 'sortings')
-                        ->where('id', $item['stock_id'])
-                        ->decrement('quantity_in', $qty);
-                }
+                $qty     = floatval($item['quantity'] ?? 0);
+                $type    = $item['type']     ?? '';
+                $stockId = (int) ($item['stock_id'] ?? 0);
+                if (!$qty || !$type || !$stockId) continue;
+                $batch = self::resolveBatch($type, $stockId);
+                $batch::withoutEvents(function () use ($batch, $qty) {
+                    $batch->quantity_remaining = max($batch->remainingUsable() - $qty, 0);
+                    $batch->save();
+                });
             }
         });
 
@@ -143,63 +138,19 @@ class Milling extends Model
 
         static::updated(function ($milling) {
             if (!$milling->wasChanged('items')) return;
-
-            $buildMap = fn (array $items) => array_reduce($items, function ($map, $item) {
-                $key = ($item['source'] ?? '') . ':' . ($item['stock_id'] ?? '');
-                $map[$key] = ($map[$key] ?? 0) + floatval($item['quantity'] ?? 0);
-                return $map;
-            }, []);
-
-            $oldMap  = $buildMap(self::normalizeMillingItems($milling->getOriginal('items')));
-            $newMap  = $buildMap(self::normalizeMillingItems($milling->items));
-            $allKeys = array_unique(array_merge(array_keys($oldMap), array_keys($newMap)));
-
-            foreach ($allKeys as $key) {
-                [$source, $stockId] = explode(':', $key, 2);
-                if (!$source || !$stockId) continue;
-                $diff = ($newMap[$key] ?? 0) - ($oldMap[$key] ?? 0);
-                if ($diff == 0) continue;
-                $table = $source === 'roasting' ? 'roastings' : 'sortings';
-                if ($diff > 0) {
-                    \DB::table($table)->where('id', $stockId)->decrement('quantity_in', $diff);
-                } else {
-                    \DB::table($table)->where('id', $stockId)->increment('quantity_in', abs($diff));
-                }
-            }
-
             DB::transaction(function () use ($milling) {
-                self::restoreItemQuantities(self::normalizeMillingItems($milling->items));
+                self::applyItemDiff(
+                    self::normalizeMillingItems($milling->getOriginal('items')),
+                    self::normalizeMillingItems($milling->items)
+                );
             });
         });
 
         static::deleted(function ($milling) {
-            foreach ($milling->items ?? [] as $item) {
-                $qty = floatval($item['quantity'] ?? 0);
-                if (!$qty || empty($item['stock_id'])) continue;
-                $table = ($item['source'] ?? '') === 'roasting' ? 'roastings' : 'sortings';
-                \DB::table($table)->where('id', $item['stock_id'])->increment('quantity_in', $qty);
-            }
+            DB::transaction(function () use ($milling) {
+                self::applyItemDiff(self::normalizeMillingItems($milling->items), []);
+            });
         });
-    }
-
-    /**
-     * Deduct ingredient quantities from sorting/roasting batches on create.
-     *
-     * @param  array<int, array<string, mixed>>  $items
-     */
-    private static function deductItemQuantities(array $items): void
-    {
-        self::applyItemDiff([], $items);
-    }
-
-    /**
-     * Restore ingredient quantities to sorting/roasting batches on delete.
-     *
-     * @param  array<int, array<string, mixed>>  $items
-     */
-    private static function restoreItemQuantities(array $items): void
-    {
-        self::applyItemDiff($items, []);
     }
 
     /**

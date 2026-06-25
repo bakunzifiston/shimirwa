@@ -2,12 +2,15 @@
     $selectedCatalogId = old('packaging_catalog_id', $emballage->packaging_catalog_id ?? '');
     $selectedMillingId = old('milling_id', $emballage->milling_id ?? '');
 
-    // Catalog meta for JS: {id: {name, kg_per_unit, manual_weight}}
+    // Catalog meta for JS: {id: {name, kg_per_unit, manual_weight, has_inner_units, inner_units_per_package, inner_unit_name}}
     $catalogMeta = $packagingCatalogs->mapWithKeys(fn ($c) => [
         $c->id => [
-            'name'          => $c->name,
-            'kg_per_unit'   => (float) $c->kg_per_unit,
-            'manual_weight' => (bool) $c->manual_weight,
+            'name'                    => $c->name,
+            'kg_per_unit'             => (float) $c->kg_per_unit,
+            'manual_weight'           => (bool) $c->manual_weight,
+            'has_inner_units'         => $c->hasInnerUnits(),
+            'inner_units_per_package' => (int) $c->inner_units_per_package,
+            'inner_unit_name'         => $c->innerUnitCatalog?->name ?? '',
         ]
     ]);
 
@@ -86,6 +89,22 @@
                 </option>
             @endforeach
         </select>
+    </div>
+
+    {{-- Inner unit batch (e.g. bags inside a box) — shown only when catalog hasInnerUnits() --}}
+    <div id="inner-stock-wrap" class="md:col-span-2" style="display:none">
+        <label class="admin-label" for="inner_stock_id">Inner unit batch</label>
+        <select id="inner_stock_id" name="inner_stock_id" class="admin-input">
+            <option value="">Select batch</option>
+            @foreach ($innerStocks as $stock)
+                <option value="{{ $stock->id }}"
+                        data-item="{{ $stock->item }}"
+                        @selected(old('inner_stock_id', $emballage->inner_stock_id ?? '') == $stock->id)>
+                    {{ $stock->item }} — {{ $stock->batch_number }} ({{ number_format($stock->quantity_in) }} units left)
+                </option>
+            @endforeach
+        </select>
+        <p id="inner-stock-hint" class="mt-1 text-xs" style="color:var(--admin-text-muted)"></p>
     </div>
 
     {{-- Primary milling batch --}}
@@ -181,21 +200,23 @@
     const millingMeta    = JSON.parse(form.dataset.millingMeta    || '{}');
     const millingsOrdered = JSON.parse(form.dataset.millingsOrdered || '[]'); // oldest-first ids
 
-    const catalogEl      = form.querySelector('#packaging_catalog_id');
-    const millingEl      = form.querySelector('#milling_id');
-    const itemEl         = form.querySelector('#item');
-    const qtyEl          = form.querySelector('#quantity');
-    const catalogHint    = form.querySelector('#catalog-hint');
-    const qtyHint        = form.querySelector('#qty-hint');
-    const millingHint    = form.querySelector('#milling-hint');
-    const itemLabel      = form.querySelector('#item-label');
-    const unitPriceEl    = form.querySelector('#unit_price');
-    const totalPriceEl   = form.querySelector('#total_price');
-    const overflowWrap   = form.querySelector('#overflow-wrap');
-    const overflowRows   = form.querySelector('#overflow-rows');
-    const overflowErrWrap= form.querySelector('#overflow-error-wrap');
-    const overflowErrMsg = form.querySelector('#overflow-error-msg');
-    const overflowInputs = form.querySelector('#overflow-inputs');
+    const catalogEl       = form.querySelector('#packaging_catalog_id');
+    const millingEl       = form.querySelector('#milling_id');
+    const itemEl          = form.querySelector('#item');
+    const qtyEl           = form.querySelector('#quantity');
+    const catalogHint     = form.querySelector('#catalog-hint');
+    const qtyHint         = form.querySelector('#qty-hint');
+    const millingHint     = form.querySelector('#milling-hint');
+    const itemLabel       = form.querySelector('#item-label');
+    const unitPriceEl     = form.querySelector('#unit_price');
+    const totalPriceEl    = form.querySelector('#total_price');
+    const overflowWrap    = form.querySelector('#overflow-wrap');
+    const overflowRows    = form.querySelector('#overflow-rows');
+    const overflowErrWrap = form.querySelector('#overflow-error-wrap');
+    const overflowErrMsg  = form.querySelector('#overflow-error-msg');
+    const overflowInputs  = form.querySelector('#overflow-inputs');
+    const innerStockWrap  = form.querySelector('#inner-stock-wrap');
+    const innerStockHint  = form.querySelector('#inner-stock-hint');
 
     if (!catalogEl) return;
 
@@ -299,11 +320,55 @@
         }
     }
 
+    function syncInnerUnits() {
+        const cat   = getCatalog();
+        const units = parseFloat(itemEl.value || 0);
+        const innerSel = form.querySelector('#inner_stock_id');
+
+        if (cat && cat.has_inner_units) {
+            innerStockWrap.style.display = '';
+
+            // Filter options to only show batches matching the inner unit name
+            const matchName = (cat.inner_unit_name || '').toLowerCase();
+            let visibleCount = 0;
+            if (innerSel) {
+                Array.from(innerSel.options).forEach(opt => {
+                    if (!opt.value) return; // keep the placeholder
+                    const itemName = (opt.dataset.item || '').toLowerCase();
+                    const visible  = !matchName || itemName.includes(matchName) || matchName.includes(itemName);
+                    opt.hidden   = !visible;
+                    opt.disabled = !visible;
+                    if (visible) visibleCount++;
+                });
+                // Deselect current value if it's now hidden
+                if (innerSel.value && innerSel.options[innerSel.selectedIndex]?.hidden) {
+                    innerSel.value = '';
+                }
+            }
+
+            const totalInner = units * cat.inner_units_per_package;
+            if (innerStockHint) {
+                innerStockHint.textContent = units > 0
+                    ? `${units} × ${cat.inner_units_per_package} = ${totalInner} ${cat.inner_unit_name || 'inner units'} will be deducted`
+                    : `${cat.inner_units_per_package} × ${cat.inner_unit_name || 'inner unit'} per package`;
+                innerStockHint.style.color = 'var(--admin-primary, #10498C)';
+            }
+        } else {
+            innerStockWrap.style.display = 'none';
+            // Reset all options visibility when no inner units
+            if (innerSel) {
+                Array.from(innerSel.options).forEach(opt => { opt.hidden = false; opt.disabled = false; });
+            }
+            if (innerStockHint) { innerStockHint.textContent = ''; }
+        }
+    }
+
     function sync() {
         const cat = getCatalog();
         if (!cat) {
             if (catalogHint) { catalogHint.textContent = 'Select a type to see per-unit flour consumption.'; catalogHint.style.color = ''; }
             qtyEl.readOnly = false;
+            syncInnerUnits();
             renderOverflow();
             return;
         }
@@ -335,6 +400,7 @@
                 : 'Auto-calculated from type × units.';
         }
 
+        syncInnerUnits();
         renderOverflow();
     }
 

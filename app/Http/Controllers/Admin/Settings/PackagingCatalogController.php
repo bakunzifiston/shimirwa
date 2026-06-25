@@ -15,6 +15,7 @@ class PackagingCatalogController extends Controller
         $search = $request->string('search')->trim()->toString();
 
         $items = PackagingCatalog::query()
+            ->with('innerUnitCatalog')
             ->when($search, fn ($q) => $q->where('name', 'like', "%{$search}%")
                 ->orWhere('description', 'like', "%{$search}%"))
             ->orderBy('sort_order')->orderBy('name')
@@ -35,7 +36,10 @@ class PackagingCatalogController extends Controller
 
     public function create(): View
     {
-        return view('admin.settings.packaging-catalog.create', ['item' => new PackagingCatalog]);
+        return view('admin.settings.packaging-catalog.create', [
+            'item'     => new PackagingCatalog,
+            'catalogs' => PackagingCatalog::active()->orderBy('sort_order')->orderBy('name')->get(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -55,7 +59,12 @@ class PackagingCatalogController extends Controller
 
     public function edit(PackagingCatalog $packagingCatalog): View
     {
-        return view('admin.settings.packaging-catalog.edit', ['item' => $packagingCatalog]);
+        return view('admin.settings.packaging-catalog.edit', [
+            'item'     => $packagingCatalog,
+            // Exclude self to prevent circular inner-unit references
+            'catalogs' => PackagingCatalog::active()->where('id', '!=', $packagingCatalog->id)
+                              ->orderBy('sort_order')->orderBy('name')->get(),
+        ]);
     }
 
     public function update(Request $request, PackagingCatalog $packagingCatalog): RedirectResponse
@@ -78,12 +87,14 @@ class PackagingCatalogController extends Controller
     private function validated(Request $request, ?int $ignoreId = null): array
     {
         return $request->validate([
-            'name'          => ['required', 'string', 'max:255'],
-            'kg_per_unit'   => ['required', 'numeric', 'min:0'],
-            'manual_weight' => ['boolean'],
-            'is_active'     => ['boolean'],
-            'sort_order'    => ['integer', 'min:0'],
-            'description'   => ['nullable', 'string', 'max:500'],
+            'name'                    => ['required', 'string', 'max:255'],
+            'kg_per_unit'             => ['required', 'numeric', 'min:0'],
+            'manual_weight'           => ['boolean'],
+            'is_active'               => ['boolean'],
+            'sort_order'              => ['integer', 'min:0'],
+            'description'             => ['nullable', 'string', 'max:500'],
+            'inner_unit_catalog_id'   => ['nullable', 'exists:packaging_catalogs,id'],
+            'inner_units_per_package' => ['integer', 'min:0'],
         ]);
     }
 }
