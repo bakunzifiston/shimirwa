@@ -9,6 +9,7 @@ export default defineConfig({
                 'resources/css/app.css',
                 'resources/css/admin.css',
                 'resources/css/public.css',
+                'resources/css/filament-sidebar.css',
                 'resources/js/app.js',
                 'resources/js/public.js',
                 'resources/js/admin-dashboard.js',

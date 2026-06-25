@@ -31,7 +31,19 @@ class ClientController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.clients.index', compact('clients', 'search', 'role'));
+        $totalClients   = Client::where('role', 'client')->count();
+        $totalSuppliers = Client::where('role', 'supplier')->count();
+        $thisMonth      = Client::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->count();
+        $lastMonth      = Client::whereMonth('created_at', now()->subMonth()->month)->whereYear('created_at', now()->subMonth()->year)->count();
+        $delta          = $lastMonth > 0 ? sprintf('%+d%%', round(($thisMonth - $lastMonth) / $lastMonth * 100)) : ($thisMonth > 0 ? '+100%' : '0%');
+        $pageStats = [
+            ['label' => 'Total',      'value' => Client::count(),    'icon' => 'users', 'color' => 'blue',   'delta' => null],
+            ['label' => 'Clients',    'value' => $totalClients,      'icon' => 'users', 'color' => 'green',  'delta' => null],
+            ['label' => 'Suppliers',  'value' => $totalSuppliers,    'icon' => 'box', 'color' => 'amber',  'delta' => null],
+            ['label' => 'This month', 'value' => $thisMonth.' new',  'icon' => 'trend', 'color' => 'purple', 'delta' => $delta],
+        ];
+
+        return view('admin.clients.index', compact('clients', 'search', 'role', 'pageStats'));
     }
 
     public function create(): View

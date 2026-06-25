@@ -17,11 +17,13 @@ class StoreSortingRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'date' => ['required', 'date'],
-            'raw_material_stock_id' => ['required', 'exists:raw_material_stocks,id'],
-            'quantity_in' => ['required', 'numeric', 'min:0.01'],
-            'loss' => ['required', 'numeric', 'min:0'],
-            'employee_id' => ['required', 'exists:employees,id'],
+            'date'                                => ['required', 'date'],
+            'quantity_in'                         => ['required', 'numeric', 'min:0.01'],
+            'loss'                                => ['required', 'numeric', 'min:0'],
+            'employee_id'                         => ['required', 'exists:employees,id'],
+            'allocations'                         => ['required', 'array', 'min:1'],
+            'allocations.*.raw_material_stock_id' => ['required', 'exists:raw_material_stocks,id'],
+            'allocations.*.quantity_in'           => ['required', 'numeric', 'min:0.01'],
         ];
     }
 
@@ -63,8 +65,11 @@ class StoreSortingRequest extends FormRequest
         });
     }
 
-    protected function allowedDepletedBatchId(): ?int
+    public function messages(): array
     {
-        return null;
+        return [
+            'allocations.required' => 'Please select a batch and enter a quantity.',
+            'allocations.min'      => 'Please select a batch and enter a quantity.',
+        ];
     }
 }

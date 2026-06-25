@@ -12,19 +12,21 @@ class Emballage extends Model
     use HasFactory;
 
     protected $casts = [
-        'date' => 'date',
-        'expiry_date' => 'date',
+        'date'             => 'date',
+        'expiry_date'      => 'date',
+        'milling_overflow' => 'array',
     ];
 
     protected $fillable = [
         'date',
         'packaging_batch_id',
         'milling_id',
-        'raw_material_stock_id',  // box stock / 1kg envelope stock / sack stock
-        'envelope_stock_id',      // only for Box: the 1kg envelope batch to deduct from
-        'item',                   // number of units (boxes / envelopes / sacks)
-        'packaging_type',         // 'box' | '1kg' | 'sack'
-        'quantity',               // total flour kg = item × packagingKg()
+        'milling_overflow',        // [{milling_id, quantity}, ...] overflow draws
+        'packaging_catalog_id',   // FK → packaging_catalogs
+        'raw_material_stock_id',
+        'item',
+        'packaging_type',          // kept for legacy display; new records use catalog
+        'quantity',
         'damaged',
         'unit_price',
         'total_price',
@@ -43,6 +45,11 @@ class Emballage extends Model
         return $this->belongsTo(Milling::class);
     }
 
+    public function packagingCatalog()
+    {
+        return $this->belongsTo(PackagingCatalog::class);
+    }
+
     public function employee()
     {
         return $this->belongsTo(Employee::class);
@@ -53,48 +60,52 @@ class Emballage extends Model
         return $this->belongsTo(RawMaterialStock::class);
     }
 
-    public function envelopeStock()
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Resolve kg-per-unit from the catalog record (or fall back to legacy hardcoded types).
+     */
+    public function resolveKgPerUnit(): float
     {
-        return $this->belongsTo(RawMaterialStock::class, 'envelope_stock_id');
+        if ($this->packaging_catalog_id && $this->packagingCatalog) {
+            return (float) $this->packagingCatalog->kg_per_unit;
+        }
+        // Legacy fallback for old records
+        return self::legacyPackagingKg($this->packaging_type ?? '');
     }
 
-    // -----------------------------------------------------------------------
-    // Helper: flour kg per packaging unit
-    // -----------------------------------------------------------------------
+    public function isManualWeight(): bool
+    {
+        if ($this->packaging_catalog_id && $this->packagingCatalog) {
+            return (bool) $this->packagingCatalog->manual_weight;
+        }
+        return strtolower(trim($this->packaging_type ?? '')) === 'sack';
+    }
 
-    public static function packagingKg(string $type): float
+    public static function legacyPackagingKg(string $type): float
     {
         return match (strtolower(trim($type))) {
             'box'  => 12,
             '5kg'  => 5,
             '1kg'  => 1,
-            'sack' => 0,    // flexible: user enters weight manually
+            'sack' => 0,
             default => 1,
         };
     }
 
-    /**
-     * Validation errors for milling flour availability attach to milling_id in forms.
-     */
     protected static function failMillingFlourAvailability(string $message): never
     {
-        throw ValidationException::withMessages([
-            'milling_id' => $message,
-        ]);
+        throw ValidationException::withMessages(['milling_id' => $message]);
     }
 
-    protected static function formatKg(float $kg): string
+    protected static function fmtKg(float $kg): string
     {
-        $rounded = round($kg, 4);
-
-        return abs($rounded - round($rounded)) < 0.0001
-            ? (string) (int) round($rounded)
-            : rtrim(rtrim(number_format($rounded, 2, '.', ''), '0'), '.');
-    }
-
-    protected static function formatCount(float $n): string
-    {
-        return (string) (int) $n;
+        $r = round($kg, 4);
+        return abs($r - round($r)) < 0.0001
+            ? (string) (int) round($r)
+            : rtrim(rtrim(number_format($r, 3, '.', ''), '0'), '.');
     }
 
     // -----------------------------------------------------------------------
@@ -105,213 +116,181 @@ class Emballage extends Model
     {
         parent::boot();
 
-        // ------------------- CREATE -------------------
-        static::creating(function ($emballage) {
+        // ---- CREATE ----
+        static::creating(function (Emballage $emballage) {
+            // Eager-load catalog for this event
+            if ($emballage->packaging_catalog_id) {
+                $emballage->setRelation('packagingCatalog', PackagingCatalog::find($emballage->packaging_catalog_id));
+            }
+
+            $item    = (float) ($emballage->item ?? 0);
+            $isManual = $emballage->isManualWeight();
+            $kgPerUnit = $emballage->resolveKgPerUnit();
+
+            if (!$isManual) {
+                $emballage->quantity = $item * $kgPerUnit;
+            }
+
+            if ($emballage->milling_id && !$emballage->batch) {
+                $milling = Milling::find($emballage->milling_id);
+                if ($milling) $emballage->batch = $milling->batch_number;
+            }
+
+            $overflow   = $emballage->milling_overflow ?? [];
+            $ovTotal    = array_sum(array_column($overflow, 'quantity'));
+            $primaryQty = max(round((float) ($emballage->quantity ?? 0) - $ovTotal, 4), 0);
+
+            // Validate primary batch has enough for its share
+            if ($primaryQty > 0 && $emballage->milling_id) {
+                $milling = Milling::find($emballage->milling_id);
+                if ($milling && (float) $milling->output_flour < $primaryQty) {
+                    $avail = (float) $milling->output_flour;
+                    $msg = sprintf('Milling batch %s has %s kg available but needs %s kg.',
+                        $milling->batch_number, self::fmtKg($avail), self::fmtKg($primaryQty));
+                    self::failMillingFlourAvailability($msg);
+                }
+            }
+
+            // Store the adjusted primary quantity (total minus overflow)
+            $emballage->quantity = (float) ($emballage->quantity ?? 0);
+        });
+
+        static::created(function (Emballage $emballage) {
             $item = (float) ($emballage->item ?? 0);
-            $type = strtolower(trim($emballage->packaging_type ?? '1kg'));
 
-            // Sack: user enters quantity (kg) manually — do not overwrite
-            if ($type !== 'sack') {
-                $emballage->quantity = $item * self::packagingKg($type);
+            // Deduct packaging materials
+            if ($emballage->rawMaterialStock) {
+                \DB::table('raw_material_stocks')
+                    ->where('id', $emballage->raw_material_stock_id)
+                    ->decrement('quantity_in', $item);
+            }
+            // Deduct flour from primary milling batch
+            if ($emballage->milling_id && (float) $emballage->quantity > 0) {
+                \DB::table('millings')
+                    ->where('id', $emballage->milling_id)
+                    ->decrement('output_flour', $emballage->quantity);
             }
 
-            // Set batch from milling
-            if ($emballage->milling) {
-                $emballage->batch = $emballage->milling->batch_number;
-            }
-
-            // Milling (flour): must have enough output_flour for this packaging
-            $kgNeeded = (float) ($emballage->quantity ?? 0);
-            if ($kgNeeded > 0 && $emballage->milling_id) {
-                $milling = Milling::query()->find($emballage->milling_id);
-                if ($milling && (float) $milling->output_flour < $kgNeeded) {
-                    $available = (float) $milling->output_flour;
-                    $batch = (string) $milling->batch_number;
-                    $per = self::packagingKg($type);
-
-                    $message = $per > 0
-                        ? sprintf(
-                            'Milling batch %s has %s kg of flour available. This packaging needs %s kg (%s units × %s kg each). Use fewer units or choose another batch.',
-                            $batch,
-                            self::formatKg($available),
-                            self::formatKg($kgNeeded),
-                            self::formatCount($item),
-                            self::formatKg($per),
-                        )
-                        : sprintf(
-                            'Milling batch %s has %s kg of flour available, but this packaging needs %s kg. Reduce the total flour or choose another batch.',
-                            $batch,
-                            self::formatKg($available),
-                            self::formatKg($kgNeeded),
-                        );
-
-                    self::failMillingFlourAvailability($message);
+            // Deduct flour from overflow milling batches
+            foreach ($emballage->milling_overflow ?? [] as $ov) {
+                if (!empty($ov['milling_id']) && (float) ($ov['quantity'] ?? 0) > 0) {
+                    \DB::table('millings')
+                        ->where('id', $ov['milling_id'])
+                        ->decrement('output_flour', (float) $ov['quantity']);
                 }
             }
         });
 
-        static::created(function ($emballage) {
-            $item = (float) ($emballage->item ?? 0);
-            $type = strtolower(trim($emballage->packaging_type ?? '1kg'));
-
-            // Deduct packaging materials from raw material stocks
-            if ($type === 'box') {
-                // Deduct box units from box stock
-                if ($emballage->rawMaterialStock) {
-                    $emballage->rawMaterialStock->decrement('quantity_in', $item);
-                }
-                // Deduct 12 envelopes per box from envelope stock
-                if ($emballage->envelopeStock) {
-                    $emballage->envelopeStock->decrement('quantity_in', $item * 12);
-                }
-            } else {
-                // 1kg -> deduct envelopes; sack -> deduct sack bags
-                if ($emballage->rawMaterialStock) {
-                    $emballage->rawMaterialStock->decrement('quantity_in', $item);
-                }
+        // ---- UPDATE ----
+        static::updating(function (Emballage $emballage) {
+            if ($emballage->packaging_catalog_id) {
+                $emballage->setRelation('packagingCatalog', PackagingCatalog::find($emballage->packaging_catalog_id));
             }
 
-            // Deduct flour (kg) from milling output (validated in creating)
-            if ($emballage->milling && (float) $emballage->quantity > 0) {
-                $emballage->milling->decrement('output_flour', $emballage->quantity);
-            }
-        });
+            $item      = (float) ($emballage->item ?? 0);
+            $isManual  = $emballage->isManualWeight();
+            $kgPerUnit = $emballage->resolveKgPerUnit();
 
-        // ------------------- UPDATE -------------------
-        static::updating(function ($emballage) {
-            if (InventoryReferences::emballageReferencedInSale((int) $emballage->id)) {
-                foreach ([
-                    'item',
-                    'packaging_type',
-                    'quantity',
-                    'raw_material_stock_id',
-                    'envelope_stock_id',
-                    'milling_id',
-                    'damaged',
-                ] as $field) {
-                    if ($emballage->isDirty($field)) {
-                        throw new \Exception('Cannot change packaging quantities or materials: this batch is referenced by sales records.');
-                    }
-                }
-            }
-
-            $item = (float) ($emballage->item ?? 0);
-            $type = strtolower(trim($emballage->packaging_type ?? '1kg'));
-
-            // Sack: user manages quantity manually — do not overwrite
-            if ($type !== 'sack') {
-                $emballage->quantity = $item * self::packagingKg($type);
+            if (!$isManual) {
+                $emballage->quantity = $item * $kgPerUnit;
             }
 
             $oldItem = (float) $emballage->getOriginal('item');
-            $oldType = strtolower(trim($emballage->getOriginal('packaging_type') ?? '1kg'));
-            $oldQty  = $oldType === 'sack'
-                ? (float) $emballage->getOriginal('quantity')
-                : $oldItem * self::packagingKg($oldType);
+            $oldQty  = (float) $emballage->getOriginal('quantity');
+            $newQty  = (float) $emballage->quantity;
             $diffItem = $item - $oldItem;
 
-            // Milling flour: block save if the selected batch cannot cover the change
             $oldMillingId = $emballage->getOriginal('milling_id');
             $newMillingId = $emballage->milling_id;
-            $newQty = (float) $emballage->quantity;
 
+            // Flour availability check
             if ($newQty > 0 && $newMillingId) {
                 if ($emballage->isDirty('milling_id')) {
-                    $nextMilling = Milling::query()->find($newMillingId);
-                    if ($nextMilling && (float) $nextMilling->output_flour < $newQty) {
-                        $message = sprintf(
-                            'Milling batch %s has %s kg available, but this line needs %s kg. Choose a batch with enough flour or reduce packaging.',
-                            (string) $nextMilling->batch_number,
-                            self::formatKg((float) $nextMilling->output_flour),
-                            self::formatKg($newQty),
-                        );
-                        self::failMillingFlourAvailability($message);
+                    $next = Milling::find($newMillingId);
+                    if ($next && (float) $next->output_flour < $newQty) {
+                        self::failMillingFlourAvailability(sprintf(
+                            'Milling batch %s has %s kg available but needs %s kg.',
+                            $next->batch_number, self::fmtKg((float) $next->output_flour), self::fmtKg($newQty)
+                        ));
                     }
                 } else {
                     $diffQty = $newQty - $oldQty;
                     if ($diffQty > 0) {
-                        $m = Milling::query()->find($emballage->milling_id);
+                        $m = Milling::find($newMillingId);
                         if ($m && (float) $m->output_flour < $diffQty) {
-                            $message = sprintf(
-                                'Milling batch %s has %s kg free for this change, but you need %s kg more flour. Reduce units or pick another batch.',
-                                (string) $m->batch_number,
-                                self::formatKg((float) $m->output_flour),
-                                self::formatKg($diffQty),
-                            );
-                            self::failMillingFlourAvailability($message);
+                            self::failMillingFlourAvailability(sprintf(
+                                'Milling batch %s has only %s kg free; you need %s kg more.',
+                                $m->batch_number, self::fmtKg((float) $m->output_flour), self::fmtKg($diffQty)
+                            ));
                         }
                     }
                 }
             }
 
-            // Adjust raw material stocks
-            if ($type === 'box') {
-                if ($emballage->rawMaterialStock) {
-                    $emballage->rawMaterialStock->decrement('quantity_in', $diffItem);
-                }
-                if ($emballage->envelopeStock) {
-                    $emballage->envelopeStock->decrement('quantity_in', $diffItem * 12);
-                }
-            } else {
-                if ($emballage->rawMaterialStock) {
-                    $emballage->rawMaterialStock->decrement('quantity_in', $diffItem);
-                }
+            // Adjust packaging material stocks
+            if ($emballage->raw_material_stock_id && $diffItem != 0) {
+                \DB::table('raw_material_stocks')
+                    ->where('id', $emballage->raw_material_stock_id)
+                    ->decrement('quantity_in', $diffItem);
             }
-
-            // Adjust milling flour: follow the selected milling batch
+            // Adjust flour — primary batch
             if ($emballage->isDirty('milling_id')) {
-                if ($oldMillingId) {
-                    $previousMilling = Milling::query()->find($oldMillingId);
-                    if ($previousMilling && $oldQty > 0) {
-                        $previousMilling->increment('output_flour', $oldQty);
-                    }
+                if ($oldMillingId && $oldQty > 0) {
+                    \DB::table('millings')->where('id', $oldMillingId)->increment('output_flour', $oldQty);
                 }
-                if ($newMillingId) {
-                    $nextMilling = Milling::query()->find($newMillingId);
-                    if ($nextMilling && (float) $emballage->quantity > 0) {
-                        $nextMilling->decrement('output_flour', $emballage->quantity);
-                    }
+                if ($newMillingId && $newQty > 0) {
+                    \DB::table('millings')->where('id', $newMillingId)->decrement('output_flour', $newQty);
+                }
+                if ($emballage->milling) {
+                    $emballage->batch = $emballage->milling->batch_number;
                 }
             } else {
-                $diffQty = $emballage->quantity - $oldQty;
-                if ($emballage->milling && $diffQty != 0) {
-                    $emballage->milling->decrement('output_flour', $diffQty);
+                $diffQty = $newQty - $oldQty;
+                if ($diffQty != 0 && $newMillingId) {
+                    \DB::table('millings')->where('id', $newMillingId)->decrement('output_flour', $diffQty);
                 }
             }
 
-            if ($emballage->isDirty('milling_id') && $emballage->milling) {
-                $emballage->batch = $emballage->milling->batch_number;
+            // Adjust flour — overflow batches: restore old, deduct new
+            if ($emballage->isDirty('milling_overflow')) {
+                $oldOverflow = $emballage->getOriginal('milling_overflow') ?? [];
+                if (is_string($oldOverflow)) $oldOverflow = json_decode($oldOverflow, true) ?? [];
+                foreach ($oldOverflow as $ov) {
+                    if (!empty($ov['milling_id']) && (float) ($ov['quantity'] ?? 0) > 0) {
+                        \DB::table('millings')->where('id', $ov['milling_id'])->increment('output_flour', (float) $ov['quantity']);
+                    }
+                }
+                foreach ($emballage->milling_overflow ?? [] as $ov) {
+                    if (!empty($ov['milling_id']) && (float) ($ov['quantity'] ?? 0) > 0) {
+                        \DB::table('millings')->where('id', $ov['milling_id'])->decrement('output_flour', (float) $ov['quantity']);
+                    }
+                }
             }
         });
 
-        // ------------------- DELETE -------------------
-        static::deleting(function ($emballage) {
-            if (InventoryReferences::emballageReferencedInSale((int) $emballage->id)) {
-                throw new \Exception('Cannot delete packaging: it is referenced by sales records.');
-            }
-        });
-
-        static::deleted(function ($emballage) {
+        // ---- DELETE ----
+        static::deleted(function (Emballage $emballage) {
             $item = (float) ($emballage->item ?? 0);
-            $type = strtolower(trim($emballage->packaging_type ?? '1kg'));
 
-            // Restore raw material stocks
-            if ($type === 'box') {
-                if ($emballage->rawMaterialStock) {
-                    $emballage->rawMaterialStock->increment('quantity_in', $item);
-                }
-                if ($emballage->envelopeStock) {
-                    $emballage->envelopeStock->increment('quantity_in', $item * 12);
-                }
-            } else {
-                if ($emballage->rawMaterialStock) {
-                    $emballage->rawMaterialStock->increment('quantity_in', $item);
-                }
+            if ($emballage->raw_material_stock_id && $item > 0) {
+                \DB::table('raw_material_stocks')
+                    ->where('id', $emballage->raw_material_stock_id)
+                    ->increment('quantity_in', $item);
+            }
+            // Restore flour to primary milling batch
+            if ($emballage->milling_id && (float) $emballage->quantity > 0) {
+                \DB::table('millings')
+                    ->where('id', $emballage->milling_id)
+                    ->increment('output_flour', $emballage->quantity);
             }
 
-            // Restore milling flour
-            if ($emballage->milling) {
-                $emballage->milling->increment('output_flour', $emballage->quantity);
+            // Restore flour to overflow milling batches
+            foreach ($emballage->milling_overflow ?? [] as $ov) {
+                if (!empty($ov['milling_id']) && (float) ($ov['quantity'] ?? 0) > 0) {
+                    \DB::table('millings')
+                        ->where('id', $ov['milling_id'])
+                        ->increment('output_flour', (float) $ov['quantity']);
+                }
             }
         });
     }

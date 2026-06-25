@@ -11,6 +11,14 @@
 @endsection
 
 @section('content')
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex gap-2">
+            <a href="{{ route('admin.sales.edit', $sale) }}"
+               data-drawer-src="{{ route('admin.sales.edit', $sale) }}"
+               data-drawer-title="Edit"
+               class="admin-btn admin-btn-primary admin-btn-sm">Edit</a>
+        </div>
+    </div>
     <div class="admin-card max-w-3xl">
         <div class="admin-card-header"><h2 class="admin-card-title">Sale details</h2></div>
         <div class="admin-card-body">

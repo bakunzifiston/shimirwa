@@ -7,9 +7,17 @@
     const mobileNav = document.querySelector('[data-site-mobile-nav]');
 
     if (header) {
-        window.addEventListener('scroll', () => {
-            header.classList.toggle('is-scrolled', window.scrollY > 8);
-        }, { passive: true });
+        const hero = document.querySelector('.site-hero-animated');
+        const updateHeader = () => {
+            const scrolled = window.scrollY > 8;
+            header.classList.toggle('is-scrolled', scrolled);
+            if (hero) {
+                const heroBottom = hero.getBoundingClientRect().bottom;
+                header.classList.toggle('over-hero', heroBottom > 0);
+            }
+        };
+        window.addEventListener('scroll', updateHeader, { passive: true });
+        updateHeader();
     }
 
     if (toggle && mobileNav) {

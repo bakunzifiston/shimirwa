@@ -11,6 +11,14 @@
 @endsection
 
 @section('content')
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex gap-2">
+            <a href="{{ route('admin.emballages.edit', $emballage) }}"
+               data-drawer-src="{{ route('admin.emballages.edit', $emballage) }}"
+               data-drawer-title="Edit"
+               class="admin-btn admin-btn-primary admin-btn-sm">Edit</a>
+        </div>
+    </div>
     <div class="admin-card max-w-3xl">
         <div class="admin-card-header"><h2 class="admin-card-title">Packaging details</h2></div>
         <div class="admin-card-body">

@@ -8,6 +8,14 @@
 @endsection
 
 @section('content')
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex gap-2">
+            <a href="{{ route('admin.users.edit', $user) }}"
+               data-drawer-src="{{ route('admin.users.edit', $user) }}"
+               data-drawer-title="Edit"
+               class="admin-btn admin-btn-primary admin-btn-sm">Edit</a>
+        </div>
+    </div>
     <div class="admin-card max-w-xl p-6">
         <dl class="grid gap-4">
             <div><dt class="text-sm text-slate-500">Name</dt><dd class="font-medium">{{ $user->name }}</dd></div>

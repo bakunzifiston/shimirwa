@@ -5,6 +5,14 @@
     <a href="{{ route('admin.roastings.edit', $roasting) }}" class="admin-btn-primary rounded-md px-4 py-2 text-sm no-underline">Edit</a>
 @endsection
 @section('content')
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex gap-2">
+            <a href="{{ route('admin.roastings.edit', $roasting) }}"
+               data-drawer-src="{{ route('admin.roastings.edit', $roasting) }}"
+               data-drawer-title="Edit"
+               class="admin-btn admin-btn-primary admin-btn-sm">Edit</a>
+        </div>
+    </div>
     <div class="admin-card max-w-2xl p-6">
         <dl class="grid gap-4 sm:grid-cols-2">
             <div><dt class="text-sm text-slate-500">Date</dt><dd>{{ optional($roasting->date)->format('Y-m-d') }}</dd></div>

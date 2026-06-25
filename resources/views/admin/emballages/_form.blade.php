@@ -1,32 +1,85 @@
 @php
-    $ptype = old('packaging_type', $emballage->packaging_type ?? '1kg');
+    $selectedCatalogId = old('packaging_catalog_id', $emballage->packaging_catalog_id ?? '');
+    $selectedMillingId = old('milling_id', $emballage->milling_id ?? '');
+
+    // Catalog meta for JS: {id: {name, kg_per_unit, manual_weight}}
+    $catalogMeta = $packagingCatalogs->mapWithKeys(fn ($c) => [
+        $c->id => [
+            'name'          => $c->name,
+            'kg_per_unit'   => (float) $c->kg_per_unit,
+            'manual_weight' => (bool) $c->manual_weight,
+        ]
+    ]);
+
+    // Milling meta for JS: {id: {batch_number, available, date}}
+    // For edit: add back what this emballage already consumed on linked batches
+    $millingMeta = $millings->mapWithKeys(function ($m) use ($emballage) {
+        $avail = (float) $m->output_flour;
+        // Restore primary batch
+        if (isset($emballage) && $emballage->exists && $emballage->milling_id == $m->id) {
+            $avail += (float) $emballage->quantity;
+        }
+        // Restore overflow batches
+        foreach ($emballage->milling_overflow ?? [] as $ov) {
+            if (($ov['milling_id'] ?? null) == $m->id) {
+                $avail += (float) ($ov['quantity'] ?? 0);
+            }
+        }
+        return [$m->id => [
+            'batch'     => $m->batch_number,
+            'available' => round($avail, 4),
+            'date'      => $m->date?->format('Y-m-d') ?? '',
+        ]];
+    });
+
+    // All milling batches sorted oldest-first for overflow allocation
+    $millingsSortedOldest = $millings->sortBy('date')->values();
 @endphp
 
 <div id="emballage-form" class="admin-form-grid"
-     data-kg='@json(["box"=>12,"1kg"=>1,"5kg"=>5,"sack"=>0])'>
+     data-catalog-meta='@json($catalogMeta)'
+     data-milling-meta='@json($millingMeta)'
+     data-millings-ordered='@json($millingsSortedOldest->pluck("id"))'>
 
     <div>
         <label class="admin-label" for="date">Date</label>
         <input type="date" id="date" name="date" class="admin-input"
-               value="{{ old('date', optional($emballage->date)->format('Y-m-d')) }}" required>
+               value="{{ old('date', optional($emballage->date)->format('Y-m-d') ?? date('Y-m-d')) }}" required>
     </div>
     <div>
         <label class="admin-label" for="packaging_batch_id">Packaging batch ID</label>
         <input type="text" id="packaging_batch_id" name="packaging_batch_id" class="admin-input"
                value="{{ old('packaging_batch_id', $emballage->packaging_batch_id) }}" required>
     </div>
+
+    {{-- Packaging type + material batch side by side --}}
+    @if ($packagingCatalogs->isEmpty())
+        <div class="md:col-span-2">
+            <div class="rounded-md border px-3 py-2 text-sm" style="background:#fff7ed;border-color:#fed7aa;color:#c2410c">
+                No packaging types defined yet.
+                <a href="{{ route('admin.settings.packaging-catalog.create') }}" class="underline font-medium ml-1">Add one in Settings → Packaging Catalog</a>
+            </div>
+            <input type="hidden" name="packaging_catalog_id" value="">
+        </div>
+    @else
+        <div>
+            <label class="admin-label" for="packaging_catalog_id">Packaging type</label>
+            <select id="packaging_catalog_id" name="packaging_catalog_id" class="admin-input" required>
+                <option value="">Select packaging type</option>
+                @foreach ($packagingCatalogs as $cat)
+                    <option value="{{ $cat->id }}" @selected($selectedCatalogId == $cat->id)>
+                        {{ $cat->name }}{{ !$cat->manual_weight ? ' ('.$cat->kg_per_unit.' kg/unit)' : '' }}
+                    </option>
+                @endforeach
+            </select>
+            <p id="catalog-hint" class="mt-1 text-xs" style="color:var(--admin-text-muted)">Select a type to see per-unit flour consumption.</p>
+        </div>
+    @endif
+
     <div>
-        <label class="admin-label" for="packaging_type">Packaging type</label>
-        <select id="packaging_type" name="packaging_type" class="admin-input" required>
-            @foreach ($packagingTypes as $value => $label)
-                <option value="{{ $value }}" @selected($ptype === $value)>{{ $label }}</option>
-            @endforeach
-        </select>
-    </div>
-    <div>
-        <label class="admin-label" for="raw_material_stock_id" id="stock-label">Packaging material batch</label>
-        <select id="raw_material_stock_id" name="raw_material_stock_id" class="admin-input" required>
-            <option value="">Select batch</option>
+        <label class="admin-label" for="raw_material_stock_id">Packaging material batch</label>
+        <select id="raw_material_stock_id" name="raw_material_stock_id" class="admin-input">
+            <option value="">Select batch (optional)</option>
             @foreach ($packagingStocks as $stock)
                 <option value="{{ $stock->id }}" @selected(old('raw_material_stock_id', $emballage->raw_material_stock_id) == $stock->id)>
                     {{ $stock->item }} — {{ $stock->batch_number }} ({{ $stock->quantity_in }} left)
@@ -34,39 +87,53 @@
             @endforeach
         </select>
     </div>
-    <div id="envelope-wrap" style="display:none">
-        <label class="admin-label" for="envelope_stock_id">Envelope batch (for boxes)</label>
-        <select id="envelope_stock_id" name="envelope_stock_id" class="admin-input">
-            <option value="">Select envelope batch</option>
-            @foreach ($packagingStocks as $stock)
-                <option value="{{ $stock->id }}" @selected(old('envelope_stock_id', $emballage->envelope_stock_id) == $stock->id)>
-                    {{ $stock->item }} — {{ $stock->batch_number }} ({{ $stock->quantity_in }} left)
-                </option>
-            @endforeach
-        </select>
-    </div>
-    <div>
-        <label class="admin-label" for="milling_id">Milling batch (flour)</label>
-        <select id="milling_id" name="milling_id" class="admin-input">
+
+    {{-- Primary milling batch --}}
+    <div class="md:col-span-2">
+        <label class="admin-label" for="milling_id">Milling batch (flour source)</label>
+        <select id="milling_id" name="milling_id" class="admin-input" required>
             <option value="">Select milling batch</option>
-            @foreach ($millings as $milling)
-                <option value="{{ $milling->id }}" @selected(old('milling_id', $emballage->milling_id) == $milling->id)>
-                    {{ $milling->batch_number }} — {{ $milling->output_flour }} kg available
+            @foreach ($millings as $m)
+                <option value="{{ $m->id }}" @selected(old('milling_id', $selectedMillingId) == $m->id)>
+                    {{ $m->batch_number }} — {{ number_format($m->output_flour, 1) }} kg available
                 </option>
             @endforeach
         </select>
+        <p id="milling-hint" class="mt-1 text-xs" style="color:var(--admin-text-muted)"></p>
     </div>
+
+    {{-- Overflow panel: shown when quantity > selected batch available --}}
+    <div class="md:col-span-2" id="overflow-wrap" style="display:none">
+        <div class="rounded-lg border overflow-hidden" style="border-color:#fde68a">
+            <div class="px-3 py-2 text-xs font-semibold" style="background:#fef9c3;color:#854d0e">
+                Quantity exceeds this batch — also drawing from:
+            </div>
+            <div id="overflow-rows" class="divide-y" style="border-color:#fde68a"></div>
+        </div>
+    </div>
+
+    {{-- Not enough stock error --}}
+    <div class="md:col-span-2" id="overflow-error-wrap" style="display:none">
+        <p id="overflow-error-msg" class="text-xs font-medium rounded p-2"
+           style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca"></p>
+    </div>
+
+    {{-- Hidden overflow inputs (populated by JS) --}}
+    <div id="overflow-inputs" class="md:col-span-2" style="display:none"></div>
+
     <div>
         <label class="admin-label" for="item" id="item-label">Number of units</label>
         <input type="number" step="1" min="1" id="item" name="item" class="admin-input"
                value="{{ old('item', $emballage->item) }}" required>
     </div>
+
     <div>
         <label class="admin-label" for="quantity">Flour quantity (kg)</label>
-        <input type="number" step="0.01" min="0" id="quantity" name="quantity" class="admin-input"
+        <input type="number" step="0.001" min="0" id="quantity" name="quantity" class="admin-input"
                value="{{ old('quantity', $emballage->quantity) }}" required>
-        <p class="mt-1 text-xs text-slate-500" id="qty-hint">Auto-calculated except for sacks.</p>
+        <p class="mt-1 text-xs" id="qty-hint" style="color:var(--admin-text-muted)">Auto-calculated from type × units. Editable for manual weight types.</p>
     </div>
+
     <div>
         <label class="admin-label" for="damaged">Damaged units</label>
         <input type="number" step="1" min="0" id="damaged" name="damaged" class="admin-input"
@@ -105,49 +172,187 @@
     </div>
 </div>
 
-@push('scripts')
 <script>
 (function () {
-    const form = document.getElementById('emballage-form');
+    const form          = document.getElementById('emballage-form');
     if (!form) return;
-    const kgMap = JSON.parse(form.dataset.kg || '{}');
-    const typeEl = document.getElementById('packaging_type');
-    const itemEl = document.getElementById('item');
-    const qtyEl = document.getElementById('quantity');
-    const envelopeWrap = document.getElementById('envelope-wrap');
-    const envelopeEl = document.getElementById('envelope_stock_id');
-    const itemLabel = document.getElementById('item-label');
-    const qtyHint = document.getElementById('qty-hint');
 
-    const labels = {
-        box: 'Number of boxes',
-        '1kg': 'Number of 1kg packages',
-        '5kg': 'Number of 5kg packages',
-        sack: 'Number of sacks',
-    };
+    const catalogMeta    = JSON.parse(form.dataset.catalogMeta    || '{}');
+    const millingMeta    = JSON.parse(form.dataset.millingMeta    || '{}');
+    const millingsOrdered = JSON.parse(form.dataset.millingsOrdered || '[]'); // oldest-first ids
 
-    function sync() {
-        const type = typeEl.value;
-        itemLabel.textContent = labels[type] || 'Number of units';
-        envelopeWrap.style.display = type === 'box' ? '' : 'none';
-        envelopeEl.required = type === 'box';
-        if (type !== 'box') envelopeEl.value = '';
-        const kg = parseFloat(kgMap[type] || 1);
-        if (type === 'sack') {
-            qtyEl.readOnly = false;
-            qtyEl.classList.remove('bg-slate-100');
-            qtyHint.textContent = 'Enter flour weight manually for sacks.';
-        } else {
-            qtyEl.readOnly = true;
-            qtyEl.classList.add('bg-slate-100');
-            qtyEl.value = (parseFloat(itemEl.value || 0) * kg).toFixed(2);
-            qtyHint.textContent = `Auto: ${kg} kg per unit.`;
+    const catalogEl      = form.querySelector('#packaging_catalog_id');
+    const millingEl      = form.querySelector('#milling_id');
+    const itemEl         = form.querySelector('#item');
+    const qtyEl          = form.querySelector('#quantity');
+    const catalogHint    = form.querySelector('#catalog-hint');
+    const qtyHint        = form.querySelector('#qty-hint');
+    const millingHint    = form.querySelector('#milling-hint');
+    const itemLabel      = form.querySelector('#item-label');
+    const unitPriceEl    = form.querySelector('#unit_price');
+    const totalPriceEl   = form.querySelector('#total_price');
+    const overflowWrap   = form.querySelector('#overflow-wrap');
+    const overflowRows   = form.querySelector('#overflow-rows');
+    const overflowErrWrap= form.querySelector('#overflow-error-wrap');
+    const overflowErrMsg = form.querySelector('#overflow-error-msg');
+    const overflowInputs = form.querySelector('#overflow-inputs');
+
+    if (!catalogEl) return;
+
+    function getCatalog() { return catalogMeta[catalogEl?.value] || null; }
+    function getMillingMeta(id) { return millingMeta[id] || null; }
+
+    // Total flour available across all milling batches (ordered oldest-first)
+    function totalFlourAvail() {
+        return millingsOrdered.reduce((sum, id) => {
+            return sum + (millingMeta[id]?.available ?? 0);
+        }, 0);
+    }
+
+    // Compute overflow allocations from startId onward (oldest-first order)
+    function computeAlloc(startId, qty) {
+        const startIdx = millingsOrdered.findIndex(id => String(id) === String(startId));
+        const ordered  = startIdx >= 0
+            ? [...millingsOrdered.slice(startIdx), ...millingsOrdered.slice(0, startIdx)]
+            : millingsOrdered;
+
+        let rem = qty;
+        const alloc = [];
+        for (const id of ordered) {
+            if (rem <= 0) break;
+            const m = millingMeta[id];
+            if (!m || m.available <= 0) continue;
+            const take = Math.min(m.available, rem);
+            alloc.push({ id, batch: m.batch, date: m.date, take: Math.round(take * 1000) / 1000 });
+            rem = Math.round((rem - take) * 1000) / 1000;
+        }
+        return { alloc, unmet: Math.max(rem, 0) };
+    }
+
+    function renderOverflow() {
+        const millingId = millingEl?.value;
+        const qty       = parseFloat(qtyEl.value || 0);
+
+        overflowWrap.style.display    = 'none';
+        overflowErrWrap.style.display = 'none';
+        overflowInputs.innerHTML      = '';
+        if (millingHint) { millingHint.textContent = ''; millingHint.style.color = ''; }
+
+        if (!millingId) return;
+
+        const m      = getMillingMeta(millingId);
+        const avail  = m?.available ?? 0;
+        const total  = totalFlourAvail();
+
+        if (millingHint) {
+            millingHint.textContent = avail < total
+                ? `This batch: ${avail.toFixed(2)} kg · All batches: ${total.toFixed(2)} kg`
+                : `Available: ${avail.toFixed(2)} kg`;
+            millingHint.style.color = 'var(--admin-text-muted)';
+        }
+
+        if (qty <= 0) return;
+
+        if (qty > total) {
+            overflowErrWrap.style.display = '';
+            overflowErrMsg.textContent = `Not enough flour. Total available across all batches: ${total.toFixed(2)} kg.`;
+            return;
+        }
+
+        const { alloc, unmet } = computeAlloc(millingId, qty);
+
+        if (unmet > 0) {
+            overflowErrWrap.style.display = '';
+            overflowErrMsg.textContent = `Not enough flour (${unmet.toFixed(3)} kg short).`;
+            return;
+        }
+
+        // Show overflow panel if more than one batch used
+        const extra = alloc.slice(1);
+        if (extra.length > 0) {
+            overflowWrap.style.display = '';
+            overflowRows.innerHTML = extra.map(a =>
+                `<div class="px-3 py-2 flex items-center justify-between text-sm" style="background:#fffbeb">
+                    <div>
+                        <span class="font-mono text-xs font-semibold">${a.batch}</span>
+                        <span class="ml-2 text-xs" style="color:#78716c">${a.date}</span>
+                    </div>
+                    <span class="font-semibold" style="color:#92400e">${a.take.toFixed(3)} kg</span>
+                </div>`
+            ).join('');
+
+            // Hidden inputs for overflow
+            extra.forEach((a, j) => {
+                overflowInputs.innerHTML +=
+                    `<input type="hidden" name="milling_overflow[${j}][milling_id]" value="${a.id}">` +
+                    `<input type="hidden" name="milling_overflow[${j}][quantity]" value="${a.take}">`;
+            });
+        }
+
+        // Update primary batch hint
+        if (millingHint && alloc[0]) {
+            const primaryTake = alloc[0].take;
+            millingHint.textContent = extra.length > 0
+                ? `Drawing ${primaryTake.toFixed(3)} kg here + ${extra.length} more batch(es)`
+                : `Using ${primaryTake.toFixed(3)} kg from this batch`;
+            millingHint.style.color = 'var(--admin-primary, #10498C)';
         }
     }
 
-    typeEl.addEventListener('change', sync);
-    itemEl.addEventListener('input', sync);
+    function sync() {
+        const cat = getCatalog();
+        if (!cat) {
+            if (catalogHint) { catalogHint.textContent = 'Select a type to see per-unit flour consumption.'; catalogHint.style.color = ''; }
+            qtyEl.readOnly = false;
+            renderOverflow();
+            return;
+        }
+
+        if (catalogHint) {
+            catalogHint.textContent = cat.manual_weight
+                ? 'Manual weight — enter flour kg directly.'
+                : `${cat.kg_per_unit} kg of flour per unit.`;
+            catalogHint.style.color = 'var(--admin-primary, #10498C)';
+        }
+
+        itemLabel.textContent = `Number of ${cat.name}s`;
+
+        if (cat.manual_weight) {
+            qtyEl.readOnly = false;
+            qtyEl.style.background = '';
+            qtyHint.textContent = 'Enter flour weight manually.';
+            qtyHint.style.color = '';
+        } else {
+            qtyEl.readOnly = true;
+            qtyEl.style.background = 'var(--admin-bg)';
+            const units    = parseFloat(itemEl.value || 0);
+            const computed = parseFloat((units * cat.kg_per_unit).toFixed(3));
+            qtyEl.value    = computed || '';
+
+            qtyHint.style.color = 'var(--admin-primary, #10498C)';
+            qtyHint.textContent = units > 0
+                ? `Auto: ${units} × ${cat.kg_per_unit} kg = ${computed} kg`
+                : 'Auto-calculated from type × units.';
+        }
+
+        renderOverflow();
+    }
+
+    function updateTotal() {
+        const units = parseFloat(itemEl.value || 0);
+        const price = parseFloat(unitPriceEl?.value || 0);
+        if (totalPriceEl && units > 0 && price > 0) {
+            totalPriceEl.value = (units * price).toFixed(2);
+        }
+    }
+
+    catalogEl.addEventListener('change', sync);
+    millingEl?.addEventListener('change', renderOverflow);
+    itemEl.addEventListener('input', () => { sync(); updateTotal(); });
+    qtyEl.addEventListener('input', () => { renderOverflow(); }); // manual-weight mode
+    unitPriceEl?.addEventListener('input', updateTotal);
+
     sync();
+    updateTotal();
 })();
 </script>
-@endpush

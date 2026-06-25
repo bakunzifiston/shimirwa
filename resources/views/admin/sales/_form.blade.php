@@ -63,13 +63,12 @@
     <div id="batches-list" class="space-y-3"></div>
 </div>
 
-@push('scripts')
 <script>
 (function () {
     const root = document.getElementById('sale-batches-form');
     if (!root) return;
     const emballages = JSON.parse(root.dataset.emballages || '[]');
-    const list = document.getElementById('batches-list');
+    const list    = root.querySelector('#batches-list');
     const initial = @json($batches);
 
     function opts(selected) {
@@ -127,9 +126,8 @@
         bindRow(list.lastElementChild);
     }
 
-    document.getElementById('add-batch').addEventListener('click', () => addRow({}));
+    root.querySelector('#add-batch').addEventListener('click', () => addRow({}));
     initial.forEach(r => addRow(r));
     if (!list.children.length) addRow({});
 })();
 </script>
-@endpush

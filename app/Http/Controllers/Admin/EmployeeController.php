@@ -29,7 +29,17 @@ class EmployeeController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.employees.index', compact('employees', 'search'));
+        $total     = Employee::count();
+        $thisMonth = Employee::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->count();
+        $lastMonth = Employee::whereMonth('created_at', now()->subMonth()->month)->whereYear('created_at', now()->subMonth()->year)->count();
+        $delta     = $lastMonth > 0 ? sprintf('%+d%%', round(($thisMonth - $lastMonth) / $lastMonth * 100)) : ($thisMonth > 0 ? '+100%' : '0%');
+        $pageStats = [
+            ['label' => 'Total employees', 'value' => $total,     'icon' => 'users', 'color' => 'blue',   'delta' => null],
+            ['label' => 'Added this month','value' => $thisMonth, 'icon' => 'calendar', 'color' => 'green',  'delta' => null],
+            ['label' => 'Growth',          'value' => $delta,     'icon' => 'trend', 'color' => 'purple', 'delta' => $delta],
+        ];
+
+        return view('admin.employees.index', compact('employees', 'search', 'pageStats'));
     }
 
     public function create(): View

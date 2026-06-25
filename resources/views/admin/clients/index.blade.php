@@ -1,16 +1,17 @@
-@extends('layouts.admin')
+﻿@extends('layouts.admin')
 
 @section('title', 'Clients & Suppliers')
 @section('page_title', 'Clients & Suppliers')
 @section('page_subtitle', 'Manage buyers and suppliers')
 
 @section('content')
+    <x-admin.page-stats :stats="$pageStats" />
     <x-admin.listing :paginator="$clients" :show-search="false">
         <x-slot:toolbar>
             <form method="GET" class="admin-filter-bar">
                 <div class="admin-search-wrap">
                     <x-admin.icon name="search" class="!absolute !left-3 !top-1/2 !h-4 !w-4 !-translate-y-1/2" style="color: var(--admin-text-subtle)" />
-                    <input type="search" name="search" value="{{ $search }}" placeholder="Search clients…" class="admin-input">
+                    <input type="search" name="search" value="{{ $search }}" placeholder="Search clientsâ€¦" class="admin-input">
                 </div>
                 <div class="admin-filter-bar__filters">
                     <select name="role" class="admin-input" aria-label="Client role">
@@ -28,7 +29,7 @@
             </form>
         </x-slot:toolbar>
         <x-slot:actions>
-            <a href="{{ route('admin.clients.create') }}" class="admin-btn admin-btn-primary admin-btn-sm">
+            <a href="{{ route('admin.clients.create') }}" data-drawer-src="{{ route('admin.clients.create') }}" data-drawer-title="Add" class="admin-btn admin-btn-primary admin-btn-sm">
                 <x-admin.icon name="plus" class="!h-4 !w-4" />
                 Add client
             </a>
@@ -48,6 +49,7 @@
                     <x-admin.row-actions
                         :view-route="route('admin.clients.show', $client)"
                         :edit-route="route('admin.clients.edit', $client)"
+                        :delete-route="route('admin.clients.destroy', $client)"
                     />
                 </td>
             </tr>
@@ -56,3 +58,4 @@
         @endforelse
     </x-admin.listing>
 @endsection
+

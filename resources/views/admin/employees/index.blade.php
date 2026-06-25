@@ -1,18 +1,19 @@
-@extends('layouts.admin')
+﻿@extends('layouts.admin')
 
 @section('title', 'Employees')
 @section('page_title', 'Employees')
 @section('page_subtitle', 'Manage staff records and assignments')
 
 @section('content')
+    <x-admin.page-stats :stats="$pageStats" />
     <x-admin.listing
         :paginator="$employees"
         :search="$search"
         :clear-route="route('admin.employees.index')"
-        placeholder="Search by name, ID, or phone…"
+        placeholder="Search by name, ID, or phoneâ€¦"
     >
         <x-slot:actions>
-            <a href="{{ route('admin.employees.create') }}" class="admin-btn admin-btn-primary admin-btn-sm">
+            <a href="{{ route('admin.employees.create') }}" data-drawer-src="{{ route('admin.employees.create') }}" data-drawer-title="Add" class="admin-btn admin-btn-primary admin-btn-sm">
                 <x-admin.icon name="plus" class="!h-4 !w-4" />
                 Add employee
             </a>
@@ -38,6 +39,7 @@
                     <x-admin.row-actions
                         :view-route="route('admin.employees.show', $employee)"
                         :edit-route="route('admin.employees.edit', $employee)"
+                        :delete-route="route('admin.employees.destroy', $employee)"
                     />
                 </td>
             </tr>
@@ -46,3 +48,4 @@
         @endforelse
     </x-admin.listing>
 @endsection
+

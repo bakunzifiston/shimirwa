@@ -39,16 +39,17 @@ return [
             'group' => 'Production',
             'items' => [
                 ['label' => 'Reception of materials', 'route' => 'admin.raw-material-stocks.index', 'icon' => 'box'],
-                ['label' => 'Roasting', 'route' => 'admin.roastings.index', 'icon' => 'fire'],
                 ['label' => 'Sorting', 'route' => 'admin.sortings.index', 'icon' => 'filter'],
+                ['label' => 'Roasting', 'route' => 'admin.roastings.index', 'icon' => 'fire'],
                 ['label' => 'Milling', 'route' => 'admin.millings.index', 'icon' => 'cog'],
-                ['label' => 'Packaging', 'route' => 'admin.emballages.index', 'icon' => 'package'],
+                ['label' => 'Packaging & Stock', 'route' => 'admin.flour-stock.index', 'icon' => 'package'],
             ],
         ],
         [
             'group' => 'Sales',
             'items' => [
                 ['label' => 'Sales', 'route' => 'admin.sales.index', 'icon' => 'cart'],
+                ['label' => 'Reports', 'route' => 'admin.reports.index', 'icon' => 'chart'],
             ],
         ],
         [

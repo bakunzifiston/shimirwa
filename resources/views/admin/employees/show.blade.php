@@ -4,14 +4,15 @@
 @section('page_title', $employee->full_name)
 @section('page_subtitle', $employee->position)
 
-@section('header_actions')
-    <a href="{{ route('admin.employees.edit', $employee) }}" class="admin-btn admin-btn-primary admin-btn-sm">
-        <x-admin.icon name="pencil" class="!h-4 !w-4" />
-        Edit
-    </a>
-@endsection
-
 @section('content')
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex gap-2">
+            <a href="{{ route('admin.employees.edit', $employee) }}"
+               data-drawer-src="{{ route('admin.employees.edit', $employee) }}"
+               data-drawer-title="Edit"
+               class="admin-btn admin-btn-primary admin-btn-sm">Edit</a>
+        </div>
+    </div>
     <div class="admin-card max-w-2xl">
         <div class="admin-card-header">
             <h2 class="admin-card-title">Profile</h2>

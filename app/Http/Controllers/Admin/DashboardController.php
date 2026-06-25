@@ -6,142 +6,137 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Emballage;
 use App\Models\Employee;
-use App\Models\Order;
-use App\Models\Product;
+use App\Models\Milling;
 use App\Models\RawMaterialStock;
+use App\Models\Roasting;
 use App\Models\Sale;
-use Illuminate\Support\Carbon;
+use App\Models\Sorting;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
-    public function __invoke(): View
+    public function __invoke(Request $request): View
     {
-        $iconMap = config('admin.stat_icons', []);
+        // ── Date filter (from chart filter form) ─────────────────────────────
+        $from = $request->filled('from') ? $request->input('from') : null;
+        $to   = $request->filled('to')   ? $request->input('to')   : null;
 
-        $primaryStats = [
-            [
-                'key' => 'sales',
-                'label' => 'Total revenue',
-                'value' => number_format((float) Sale::sum('total_price'), 0).' RWF',
-                'tone' => 'success',
-            ],
-            [
-                'key' => 'raw',
-                'label' => 'Raw material in stock',
-                'value' => number_format((float) RawMaterialStock::rawMaterialKg()->sum('quantity_in'), 1).' kg',
-                'tone' => 'primary',
-            ],
-            [
-                'key' => 'orders',
-                'label' => 'Shop orders',
-                'value' => number_format(Order::count()),
-                'tone' => 'secondary',
-            ],
-            [
-                'key' => 'products',
-                'label' => 'Active products',
-                'value' => number_format(Product::query()->where('status', Product::STATUS_ACTIVE)->count()),
-                'tone' => 'primary',
-            ],
-        ];
+        $scoped = fn($q) => $from && $to
+            ? $q->whereBetween('date', [$from, $to])
+            : $q;
 
-        $secondaryStats = [
-            ['key' => 'employees', 'label' => 'Employees', 'value' => number_format(Employee::count())],
-            ['key' => 'clients', 'label' => 'Clients', 'value' => number_format(Client::where('role', 'client')->count())],
-            ['key' => 'suppliers', 'label' => 'Suppliers', 'value' => number_format(Client::where('role', 'supplier')->count())],
-            ['key' => 'quantity', 'label' => 'Units sold', 'value' => number_format((float) Sale::sum('quantity'), 0)],
-            ['key' => 'rejected', 'label' => 'Rejected (raw material)', 'value' => number_format((float) RawMaterialStock::rawMaterialKg()->sum('rejected'), 1).' kg'],
-            ['key' => 'damaged', 'label' => 'Damaged', 'value' => number_format((float) Emballage::sum('damaged'), 0)],
-        ];
+        // ── Pipeline stock levels (always all-time for KPI cards) ────────────
+        $rawStock       = (float) RawMaterialStock::sum('quantity_in');
+        $rawReceived    = (float) RawMaterialStock::sum('received');
+        $rawRejected    = (float) RawMaterialStock::sum('rejected');
 
-        foreach ($primaryStats as &$stat) {
-            $stat['icon'] = $iconMap[$stat['key']] ?? 'chart';
+        $sortingAvail   = Sorting::all()->sum(fn ($s) => max((float)$s->quantity_in - (float)($s->loss ?? 0), 0));
+        $sortingTotal   = (float) Sorting::sum('quantity_in');
+        $sortingLoss    = (float) Sorting::sum('loss');
+
+        $roastingAvail  = Roasting::all()->sum(fn ($r) => max((float)$r->quantity_in - (float)($r->loss ?? 0), 0));
+        $roastingTotal  = (float) Roasting::sum('quantity_in');
+        $roastingLoss   = (float) Roasting::sum('loss');
+
+        $millingOutput  = (float) Milling::sum('output_flour');
+        $millingTotal   = (float) Milling::sum('total_mixed_quantity');
+        $millingLoss    = (float) Milling::sum('loss');
+
+        $packagingUnits = (float) $scoped(Emballage::query())->sum('item');
+        $packagingDmg   = (float) $scoped(Emballage::query())->sum('damaged');
+        $packagingRuns  = $scoped(Emballage::query())->count();
+
+        $revenue        = (float) $scoped(Sale::query())->sum('total_price');
+        $salesCount     = $scoped(Sale::query())->count();
+        $returned       = (float) $scoped(Sale::query())->sum('returned');
+
+        // ── People ───────────────────────────────────────────────────────────
+        $employees      = Employee::count();
+        $clients        = Client::where('role', 'client')->count();
+        $suppliers      = Client::where('role', 'supplier')->count();
+
+        // ── Today's activity ─────────────────────────────────────────────────
+        $today = now()->toDateString();
+        $todayReceptions  = RawMaterialStock::whereDate('date', $today)->count();
+        $todaySortings    = \App\Models\Sorting::whereDate('date', $today)->count();
+        $todayRoastings   = \App\Models\Roasting::whereDate('date', $today)->count();
+        $todayMillings    = \App\Models\Milling::whereDate('date', $today)->count();
+        $todayPackagings  = Emballage::whereDate('date', $today)->count();
+        $todaySales       = Sale::whereDate('date', $today)->count();
+        $todayRevenue     = (float) Sale::whereDate('date', $today)->sum('total_price');
+
+        // ── This month revenue vs last month ─────────────────────────────────
+        $monthRevenue     = (float) Sale::whereMonth('date', now()->month)->whereYear('date', now()->year)->sum('total_price');
+        $lastMonthRevenue = (float) Sale::whereMonth('date', now()->subMonth()->month)->whereYear('date', now()->subMonth()->year)->sum('total_price');
+        $revenueGrowth    = $lastMonthRevenue > 0
+            ? round(($monthRevenue - $lastMonthRevenue) / $lastMonthRevenue * 100, 1)
+            : null;
+
+        // ── Monthly revenue chart (last 12 months) ────────────────────────────
+        $monthlyRevenue = collect();
+        for ($i = 11; $i >= 0; $i--) {
+            $d = now()->subMonths($i);
+            $monthlyRevenue->push([
+                'label'   => $d->format('M Y'),
+                'revenue' => (float) Sale::whereMonth('date', $d->month)->whereYear('date', $d->year)->sum('total_price'),
+                'units'   => (int) Sale::whereMonth('date', $d->month)->whereYear('date', $d->year)->sum('quantity'),
+            ]);
         }
-        unset($stat);
 
-        $recentSales = Sale::with('client')
-            ->latest('date')
-            ->latest('id')
-            ->limit(5)
-            ->get();
+        // ── Monthly packaging chart (last 12 months) ─────────────────────────
+        $monthlyPackaging = collect();
+        for ($i = 11; $i >= 0; $i--) {
+            $d = now()->subMonths($i);
+            $monthlyPackaging->push([
+                'label' => $d->format('M Y'),
+                'kg'    => (float) Emballage::whereMonth('date', $d->month)->whereYear('date', $d->year)->sum('quantity'),
+                'units' => (float) Emballage::whereMonth('date', $d->month)->whereYear('date', $d->year)->sum('item'),
+            ]);
+        }
+
+        // ── Pipeline donut data ────────────────────────────────────────────────
+        $totalLoss = $rawRejected + $sortingLoss + $roastingLoss + $millingLoss;
+        $pipelineDonut = [
+            'labels' => ['Rejected','Sort loss','Roast loss','Mill loss','Output flour'],
+            'values' => [$rawRejected, $sortingLoss, $roastingLoss, $millingLoss, $millingOutput],
+        ];
+
+        // ── Daily this month (for column chart) ──────────────────────────
+        $daysInMonth = now()->daysInMonth;
+        $dailyPackaging = collect();
+        $dailySales     = collect();
+        for ($d = 1; $d <= $daysInMonth; $d++) {
+            $date = now()->startOfMonth()->addDays($d - 1)->toDateString();
+            $dailyPackaging->push((float) Emballage::whereDate('date', $date)->sum('item'));
+            $dailySales->push((float) Sale::whereDate('date', $date)->sum('quantity'));
+        }
+        $dailyLabels = collect(range(1, $daysInMonth))->map(fn($d) => (string)$d);
+
+        // ── Recent activity ───────────────────────────────────────────────────
+        $recentSales = Sale::with(['client', 'employee'])
+            ->latest('date')->latest('id')->limit(5)->get();
 
         $recentStock = RawMaterialStock::with('client')
-            ->latest('date')
-            ->latest('id')
-            ->limit(5)
-            ->get();
+            ->latest('date')->latest('id')->limit(5)->get();
 
-        $recentOrders = Order::with('customer')
-            ->latest()
-            ->limit(5)
-            ->get();
-
-        $chartData = [
-            'bar' => $this->monthlyRevenueChart(),
-            'pie' => $this->rawMaterialPieChart(),
-        ];
+        $recentPackaging = Emballage::with(['packagingCatalog', 'milling', 'employee'])
+            ->latest('date')->latest('id')->limit(5)->get();
 
         return view('admin.dashboard', compact(
-            'primaryStats',
-            'secondaryStats',
-            'recentSales',
-            'recentStock',
-            'recentOrders',
-            'chartData',
+            'rawStock', 'rawReceived', 'rawRejected',
+            'sortingAvail', 'sortingTotal', 'sortingLoss',
+            'roastingAvail', 'roastingTotal', 'roastingLoss',
+            'millingOutput', 'millingTotal', 'millingLoss',
+            'packagingUnits', 'packagingDmg', 'packagingRuns',
+            'revenue', 'salesCount', 'returned',
+            'employees', 'clients', 'suppliers',
+            'recentSales', 'recentStock', 'recentPackaging',
+            'todayReceptions', 'todaySortings', 'todayRoastings',
+            'todayMillings', 'todayPackagings', 'todaySales', 'todayRevenue',
+            'monthRevenue', 'lastMonthRevenue', 'revenueGrowth',
+            'monthlyRevenue', 'monthlyPackaging', 'pipelineDonut', 'totalLoss',
+            'dailyLabels', 'dailyPackaging', 'dailySales'
         ));
-    }
-
-    /**
-     * @return array{labels: list<string>, datasets: list<array{label: string, data: list<float>}>}
-     */
-    private function monthlyRevenueChart(): array
-    {
-        $labels = [];
-        $salesData = [];
-        $ordersData = [];
-
-        for ($i = 5; $i >= 0; $i--) {
-            $month = Carbon::now()->subMonths($i);
-            $labels[] = $month->format('M');
-
-            $salesData[] = (float) Sale::query()
-                ->whereYear('date', $month->year)
-                ->whereMonth('date', $month->month)
-                ->sum('total_price');
-
-            $ordersData[] = (float) Order::query()
-                ->whereYear('created_at', $month->year)
-                ->whereMonth('created_at', $month->month)
-                ->where('payment_status', '!=', Order::PAYMENT_CANCELLED)
-                ->sum('total');
-        }
-
-        return [
-            'labels' => $labels,
-            'datasets' => [
-                ['label' => 'IMS sales', 'data' => $salesData],
-                ['label' => 'Shop orders', 'data' => $ordersData],
-            ],
-        ];
-    }
-
-    /**
-     * @return array{labels: list<string>, data: list<float>}
-     */
-    private function rawMaterialPieChart(): array
-    {
-        $rows = RawMaterialStock::query()
-            ->rawMaterialKg()
-            ->selectRaw('item, SUM(CASE WHEN (received - rejected) > 0 THEN (received - rejected) ELSE 0 END) as total')
-            ->groupBy('item')
-            ->orderByDesc('total')
-            ->limit(6)
-            ->get();
-
-        return [
-            'labels' => $rows->pluck('item')->all(),
-            'data' => $rows->pluck('total')->map(fn ($value) => (float) $value)->all(),
-        ];
     }
 }

@@ -99,13 +99,15 @@
             <label class="admin-file-upload @error('images') admin-file-upload--error @enderror">
                 <span class="admin-file-upload-icon" aria-hidden="true">+</span>
                 <span class="admin-file-upload-text"><strong>Click to upload</strong> or drag files here</span>
-                <span class="admin-file-upload-hint">JPEG, PNG, WebP or GIF · Max 5 MB each · Up to 10 images</span>
+                <span class="admin-file-upload-hint">JPEG, PNG, WebP or GIF · Max 10 MB each · Up to 10 images</span>
                 <input id="images" type="file" name="images[]" class="admin-file-upload-input"
                        accept="image/jpeg,image/png,image/webp,image/gif" multiple>
             </label>
-            <p id="images-filename" class="admin-field-hint" style="margin-top:0.5rem" hidden></p>
             @error('images')<p class="admin-field-error">{{ $message }}</p>@enderror
             @error('images.*')<p class="admin-field-error">{{ $message }}</p>@enderror
+
+            {{-- New image preview grid (populated by JS) --}}
+            <div id="new-image-preview" class="admin-image-grid" style="margin-top:1rem;display:none"></div>
 
             @if ($product->exists && $product->images->isNotEmpty())
                 <p class="admin-label" style="margin-top:1.25rem">Current images</p>
@@ -121,6 +123,45 @@
                     @endforeach
                 </div>
             @endif
+
+<script>
+(function () {
+    const input   = document.getElementById('images');
+    const preview = document.getElementById('new-image-preview');
+    if (!input || !preview) return;
+
+    input.addEventListener('change', function () {
+        preview.innerHTML = '';
+        const files = Array.from(this.files);
+        if (!files.length) { preview.style.display = 'none'; return; }
+
+        preview.style.display = '';
+        files.forEach(function (file) {
+            if (!file.type.startsWith('image/')) return;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const tile = document.createElement('div');
+                tile.className = 'admin-image-tile';
+                tile.style.position = 'relative';
+
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.alt = file.name;
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit';
+
+                const badge = document.createElement('span');
+                badge.textContent = 'New';
+                badge.style.cssText = 'position:absolute;top:4px;left:4px;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:#10498C;color:#fff;pointer-events:none';
+
+                tile.appendChild(img);
+                tile.appendChild(badge);
+                preview.appendChild(tile);
+            };
+            reader.readAsDataURL(file);
+        });
+    });
+})();
+</script>
         </div>
     </section>
 

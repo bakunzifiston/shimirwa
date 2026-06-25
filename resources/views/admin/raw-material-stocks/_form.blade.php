@@ -33,6 +33,7 @@
                 <option value="{{ $value }}" @selected($selectedType === $value)>{{ $label }}</option>
             @endforeach
         </select>
+        <p id="type-hint" class="mt-1 text-xs" style="color:var(--admin-text-muted)"></p>
     </div>
 
     <div id="item-select-wrap" @if($isOther) style="display:none" @endif>
@@ -95,51 +96,59 @@
     </div>
 </div>
 
-@push('scripts')
 <script>
 (function () {
+    /* Scope to the nearest ancestor form so this script is safe to re-run
+       when the drawer re-injects the form via AJAX. */
     const form = document.getElementById('raw-material-stock-form');
     if (!form) return;
 
     const itemsByType = JSON.parse(form.dataset.items || '{}');
-    const typeEl = document.getElementById('type');
-    const itemSelectWrap = document.getElementById('item-select-wrap');
-    const itemCustomWrap = document.getElementById('item-custom-wrap');
-    const itemSelect = document.getElementById('item_select');
-    const itemCustom = document.getElementById('item_custom');
-    const itemHidden = document.getElementById('item');
-    const received = document.getElementById('received');
-    const rejected = document.getElementById('rejected');
-    const quantityDisplay = document.getElementById('quantity_in_display');
-    const initialItem = @json($selectedItem);
+    const typeEl         = form.querySelector('#type');
+    const typeHint       = form.querySelector('#type-hint');
+    const itemSelectWrap = form.querySelector('#item-select-wrap');
+    const itemCustomWrap = form.querySelector('#item-custom-wrap');
+    const itemSelect     = form.querySelector('#item_select');
+    const itemCustom     = form.querySelector('#item_custom');
+    const itemHidden     = form.querySelector('#item');
+    const received       = form.querySelector('#received');
+    const rejected       = form.querySelector('#rejected');
+    const quantityDisplay = form.querySelector('#quantity_in_display');
+    const initialItem    = @json($selectedItem);
+
+    const typeHints = {
+        'Packaging Material': 'These batches will appear in the packaging form as packaging material stock.',
+        'Raw Material': 'Raw materials go through sorting, roasting, and milling before packaging.',
+    };
+
+    function syncTypeHint() {
+        if (typeHint) {
+            typeHint.textContent = typeHints[typeEl.value] || '';
+        }
+    }
 
     function syncItemOptions() {
-        const type = typeEl.value;
+        const type    = typeEl.value;
         const isOther = type === 'Other';
 
         itemSelectWrap.style.display = isOther ? 'none' : '';
-        itemCustomWrap.style.display = isOther ? '' : 'none';
+        itemCustomWrap.style.display = isOther ? ''     : 'none';
 
         itemSelect.innerHTML = '<option value="">Select item</option>';
         if (!isOther && itemsByType[type]) {
             Object.entries(itemsByType[type]).forEach(([value, label]) => {
                 const opt = document.createElement('option');
-                opt.value = value;
+                opt.value       = value;
                 opt.textContent = label;
                 if (value === initialItem || value === itemHidden.value) opt.selected = true;
                 itemSelect.appendChild(opt);
             });
         }
-
         syncHiddenItem();
     }
 
     function syncHiddenItem() {
-        if (typeEl.value === 'Other') {
-            itemHidden.value = itemCustom.value;
-        } else {
-            itemHidden.value = itemSelect.value;
-        }
+        itemHidden.value = (typeEl.value === 'Other') ? itemCustom.value : itemSelect.value;
     }
 
     function syncQuantity() {
@@ -147,7 +156,7 @@
         quantityDisplay.value = net.toFixed(2);
     }
 
-    typeEl.addEventListener('change', syncItemOptions);
+    typeEl.addEventListener('change', () => { syncItemOptions(); syncTypeHint(); });
     itemSelect.addEventListener('change', syncHiddenItem);
     itemCustom.addEventListener('input', syncHiddenItem);
     received.addEventListener('input', syncQuantity);
@@ -155,6 +164,6 @@
 
     syncItemOptions();
     syncQuantity();
+    syncTypeHint();
 })();
 </script>
-@endpush
