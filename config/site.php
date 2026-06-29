@@ -3,15 +3,15 @@
 return [
 
     'name' => 'SHIMIRWA COMPANY Ltd',
-    'tagline' => 'Empowering local agriculture through high-quality processing, efficient supply chains, and reliable distribution.',
+    'tagline' => 'Empowering Rwanda\'s agriculture through innovation, quality, and sustainable growth.',
     'logo' => env('ADMIN_LOGO', 'images/shimirwa-logo.jpg'),
 
     'hero' => [
-        'eyebrow' => 'Welcome',
-        'headline' => 'Welcome to SHIMIRWA COMPANY Ltd',
-        'lead' => 'Empowering local agriculture through high-quality processing, efficient supply chains, and reliable distribution.',
-        'description' => 'At SHIMIRWA COMPANY Ltd, we specialize in sourcing, processing, and packaging premium agricultural products such as maize, sorghum, and soy.',
-        'card_text' => 'Maize · Sorghum · Soy',
+        'eyebrow' => 'Premium Food Processing · Rwanda',
+        'headline' => "From Rwanda's Finest\nGrains to Your Table",
+        'lead' => 'Maize. Soybeans. Sorghum. Wheat. Every grain sourced locally from Rwandan farmers, processed with care, and delivered fresh across Rwanda.',
+        'description' => 'At SHIMIRWA COMPANY Ltd, we specialize in sourcing, processing, and packaging premium agricultural products — maize, soybeans, sorghum, and wheat — for households, retailers, and institutions.',
+        'card_text' => 'Maize · Soybeans · Sorghum · Wheat',
     ],
 
     'banners' => [
@@ -36,9 +36,10 @@ return [
     ],
 
     'contact' => [
-        'email' => env('SITE_CONTACT_EMAIL', 'info@shimirwaltd.rw'),
-        'phone' => env('SITE_CONTACT_PHONE', '+250 788 000 000'),
-        'address' => 'Kigali, Rwanda',
+        'email' => env('SITE_CONTACT_EMAIL', 'shimirwacompanyltd@gmail.com'),
+        'phone' => env('SITE_CONTACT_PHONE', '+250 788 841 446'),
+        'phone2' => '+250 788 503 588',
+        'address' => 'Rulindo District, Northern Province, Rwanda',
         'map_embed' => 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d255948.261439353!2d30.061885!3d-1.970579!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x19dcaefe8c04c0b1%3A0x5fa6f4272e6fae1!2sKigali%2C%20Rwanda!5e0!3m2!1sen!2s!4v1700000000000!5m2!1sen!2s',
     ],
 
