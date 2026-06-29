@@ -5,7 +5,9 @@
 @section('page_subtitle', 'Publish and manage training resources shown on the public website')
 
 @section('content')
+<div class="admin-listing-page">
     <x-admin.listing :paginator="$trainings" :show-search="false">
+
         <x-slot:toolbar>
             <form method="GET" class="admin-filter-bar">
                 <div class="admin-search-wrap">
@@ -16,7 +18,7 @@
                     <select name="status" class="admin-input" aria-label="Status">
                         <option value="">All statuses</option>
                         <option value="published" @selected($status === 'published')>Published</option>
-                        <option value="draft" @selected($status === 'draft')>Draft</option>
+                        <option value="draft"     @selected($status === 'draft')>Draft</option>
                     </select>
                     <select name="category" class="admin-input" aria-label="Category">
                         <option value="">All categories</option>
@@ -45,6 +47,7 @@
             <th>Cover</th>
             <th>Title</th>
             <th>Category</th>
+            <th>Media</th>
             <th>Status</th>
             <th>Published</th>
             <th class="text-right">Actions</th>
@@ -61,40 +64,37 @@
                 </td>
                 <td class="cell-primary">{{ $module->title }}</td>
                 <td>
-                    <span style="font-size:.72rem;font-weight:700;padding:.22rem .65rem;border-radius:99px;
-                                 background:rgba(193,127,62,.1);color:var(--copper-dark)">
-                        {{ $module->categoryLabel() }}
-                    </span>
+                    <span class="admin-badge">{{ $module->categoryLabel() }}</span>
+                </td>
+                <td style="font-size:.82rem">
+                    {{ $module->media_count }} file(s)
                 </td>
                 <td>
                     @if($module->isPublished())
-                        <span style="font-size:.72rem;font-weight:700;padding:.22rem .65rem;border-radius:99px;
-                                     background:#dcfce7;color:#166534">Published</span>
+                        <span class="admin-badge admin-badge--primary">Published</span>
                     @else
-                        <span style="font-size:.72rem;font-weight:700;padding:.22rem .65rem;border-radius:99px;
-                                     background:#f1f5f9;color:#475569">Draft</span>
+                        <span class="admin-badge">Draft</span>
                     @endif
                 </td>
-                <td style="font-size:.82rem;color:var(--admin-text-subtle)">
+                <td style="font-size:.82rem;color:var(--admin-text-subtle);white-space:nowrap">
                     {{ $module->published_at?->format('d M Y') ?? '—' }}
                 </td>
-                <td class="text-right" style="white-space:nowrap">
-                    <a href="{{ route('admin.trainings.show', $module) }}" class="admin-btn admin-btn-ghost admin-btn-sm">View</a>
-                    <a href="{{ route('admin.trainings.edit', $module) }}" class="admin-btn admin-btn-secondary admin-btn-sm">Edit</a>
-                    <form method="POST" action="{{ route('admin.trainings.destroy', $module) }}"
-                          onsubmit="return confirm('Delete this training module?')" style="display:inline">
-                        @csrf @method('DELETE')
-                        <button type="submit" class="admin-btn admin-btn-danger admin-btn-sm">Delete</button>
-                    </form>
+                <td class="text-right">
+                    <x-admin.row-actions
+                        :view-route="route('admin.trainings.show', $module)"
+                        :edit-route="route('admin.trainings.edit', $module)"
+                        :delete-route="route('admin.trainings.destroy', $module)"
+                        view-title="{{ $module->title }}"
+                        delete-confirm="Delete this training module and all its media?"
+                    />
                 </td>
             </tr>
         @empty
-            <tr>
-                <td colspan="6" style="text-align:center;padding:2.5rem;color:var(--admin-text-subtle)">
-                    No training modules yet.
-                    <a href="{{ route('admin.trainings.create') }}" style="color:var(--admin-primary)">Create one</a>
-                </td>
-            </tr>
+            <x-admin.empty-state colspan="7"
+                title="No training modules yet"
+                message="Create your first training module to share knowledge on the public website." />
         @endforelse
+
     </x-admin.listing>
+</div>
 @endsection

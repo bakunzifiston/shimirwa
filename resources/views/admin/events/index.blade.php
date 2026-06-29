@@ -5,7 +5,9 @@
 @section('page_subtitle', 'Create and publish events with photos and videos to the public website')
 
 @section('content')
+<div class="admin-listing-page">
     <x-admin.listing :paginator="$events" :show-search="false">
+
         <x-slot:toolbar>
             <form method="GET" class="admin-filter-bar">
                 <div class="admin-search-wrap">
@@ -40,7 +42,7 @@
             <th>Title</th>
             <th>Date</th>
             <th>Location</th>
-            <th>Photos/Videos</th>
+            <th>Media</th>
             <th>Status</th>
             <th class="text-right">Actions</th>
         </x-slot:head>
@@ -55,37 +57,38 @@
                     @endif
                 </td>
                 <td class="cell-primary">{{ $event->title }}</td>
-                <td style="font-size:.82rem;color:var(--admin-text-subtle)">
+                <td style="font-size:.82rem;color:var(--admin-text-subtle);white-space:nowrap">
                     {{ $event->event_date?->format('d M Y') ?? '—' }}
                 </td>
                 <td style="font-size:.82rem;color:var(--admin-text-subtle)">
                     {{ $event->location ?? '—' }}
                 </td>
-                <td style="font-size:.82rem">{{ $event->media_count }} file(s)</td>
+                <td style="font-size:.82rem">
+                    {{ $event->media_count }} file(s)
+                </td>
                 <td>
                     @if($event->isPublished())
-                        <span style="font-size:.72rem;font-weight:700;padding:.22rem .65rem;border-radius:99px;background:#dcfce7;color:#166534">Published</span>
+                        <span class="admin-badge admin-badge--primary">Published</span>
                     @else
-                        <span style="font-size:.72rem;font-weight:700;padding:.22rem .65rem;border-radius:99px;background:#f1f5f9;color:#475569">Draft</span>
+                        <span class="admin-badge">Draft</span>
                     @endif
                 </td>
-                <td class="text-right" style="white-space:nowrap">
-                    <a href="{{ route('admin.events.show', $event) }}" class="admin-btn admin-btn-ghost admin-btn-sm">View</a>
-                    <a href="{{ route('admin.events.edit', $event) }}" class="admin-btn admin-btn-secondary admin-btn-sm">Edit</a>
-                    <form method="POST" action="{{ route('admin.events.destroy', $event) }}"
-                          onsubmit="return confirm('Delete this event?')" style="display:inline">
-                        @csrf @method('DELETE')
-                        <button type="submit" class="admin-btn admin-btn-danger admin-btn-sm">Delete</button>
-                    </form>
+                <td class="text-right">
+                    <x-admin.row-actions
+                        :view-route="route('admin.events.show', $event)"
+                        :edit-route="route('admin.events.edit', $event)"
+                        :delete-route="route('admin.events.destroy', $event)"
+                        view-title="{{ $event->title }}"
+                        delete-confirm="Delete this event and all its photos/videos?"
+                    />
                 </td>
             </tr>
         @empty
-            <tr>
-                <td colspan="7" style="text-align:center;padding:2.5rem;color:var(--admin-text-subtle)">
-                    No events yet.
-                    <a href="{{ route('admin.events.create') }}" style="color:var(--admin-primary)">Create one</a>
-                </td>
-            </tr>
+            <x-admin.empty-state colspan="7"
+                title="No events yet"
+                message="Create your first event to share photos and videos on the public website." />
         @endforelse
+
     </x-admin.listing>
+</div>
 @endsection
