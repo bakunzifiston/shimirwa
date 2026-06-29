@@ -910,6 +910,47 @@ ul, ol { list-style: none; }
   .about-intro-grid { grid-template-columns: 1fr 1fr; }
 }
 
+/* ── Product detail responsive grid ────────────────────────── */
+@media (min-width: 768px) {
+  .product-detail-grid { grid-template-columns: 1fr 1fr !important; }
+}
+
+/* ── Cart layout ────────────────────────────────────────────── */
+.cart-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .cart-layout { grid-template-columns: 1fr 22rem; }
+}
+
+/* ── Checkout layout ─────────────────────────────────────────── */
+.checkout-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .checkout-layout { grid-template-columns: 1fr 20rem; }
+}
+
+/* ── Contact grid ────────────────────────────────────────────── */
+.contact-grid {
+  grid-template-columns: 1fr;
+}
+@media (min-width: 900px) {
+  .contact-grid { grid-template-columns: 1fr 20rem !important; }
+}
+
+/* ── Progress step labels ────────────────────────────────────── */
+.step-label { display: none; }
+@media (min-width: 480px) {
+  .step-label { display: inline; }
+}
+
 /* ── Misc helpers ───────────────────────────────────────────── */
 .hidden { display:none !important; }
 .text-muted { color:var(--text-muted); }

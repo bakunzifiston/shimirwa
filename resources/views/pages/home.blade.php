@@ -51,6 +51,51 @@
         </div>
     </div>
 
+    {{-- ── Brand Video ── --}}
+    <section class="section" style="padding-top:0;padding-bottom:0;overflow:hidden">
+        <div style="position:relative;background:var(--blue-dark)">
+            {{-- Dark overlay with text on top --}}
+            <div style="position:absolute;inset:0;z-index:2;pointer-events:none;
+                        background:linear-gradient(to bottom,
+                            rgba(8,47,87,.55) 0%,
+                            rgba(8,47,87,.15) 40%,
+                            rgba(8,47,87,.15) 60%,
+                            rgba(8,47,87,.6) 100%)">
+            </div>
+
+            {{-- Video --}}
+            <video autoplay muted loop playsinline
+                   style="width:100%;max-height:560px;object-fit:cover;display:block"
+                   aria-hidden="true"
+                   preload="auto">
+                <source src="{{ asset('images/BINO.mp4') }}" type="video/mp4">
+            </video>
+
+            {{-- Overlay label --}}
+            <div style="position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;
+                        align-items:center;justify-content:center;text-align:center;
+                        padding:2rem 1.5rem;pointer-events:none">
+                <span style="font-size:.72rem;font-weight:800;letter-spacing:.18em;text-transform:uppercase;
+                             color:var(--copper);background:rgba(193,127,62,.15);
+                             border:1px solid rgba(193,127,62,.35);
+                             padding:.35rem 1.1rem;border-radius:99px;margin-bottom:1rem">
+                    See How We Work
+                </span>
+                <h2 style="font-size:clamp(1.5rem,4vw,2.4rem);font-weight:900;color:white;
+                           letter-spacing:-.02em;line-height:1.15;margin-bottom:.65rem;
+                           text-shadow:0 2px 16px rgba(0,0,0,.4)">
+                    From Grain to<br>
+                    <span style="color:var(--copper)">Premium Flour</span>
+                </h2>
+                <p style="font-size:.9375rem;color:rgba(255,255,255,.82);max-width:36rem;
+                          line-height:1.65;text-shadow:0 1px 8px rgba(0,0,0,.3)">
+                    Watch how Shimirwa transforms raw maize, soybeans, sorghum, and wheat into
+                    quality flour products — from reception to finished packaging.
+                </p>
+            </div>
+        </div>
+    </section>
+
     {{-- Vision & Mission --}}
     <x-site.vision-mission />
 

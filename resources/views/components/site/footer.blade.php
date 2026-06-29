@@ -8,7 +8,7 @@
                     <img src="{{ $logoUrl }}" alt="{{ config('site.name') }}">
                 @endif
                 <div class="footer-brand-name">{{ config('site.name') }}</div>
-                <div class="footer-brand-sub">Food Processing · Rwanda</div>
+                <div class="footer-brand-sub">Grain Milling &amp; Flour · Rwanda</div>
                 <div class="footer-brand-desc">{{ config('site.tagline') }}</div>
                 <div class="footer-social">
                     @foreach (config('site.social', []) as $social)

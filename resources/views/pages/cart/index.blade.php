@@ -1,166 +1,287 @@
 @extends('layouts.site')
 
-@section('title', 'Cart')
+@section('title', 'My Cart')
 
 @section('content')
-    {{-- Progress steps --}}
-    <div class="border-b border-slate-100 bg-white py-4">
-        <div class="site-container">
-            <ol class="flex items-center gap-0 text-sm">
-                @foreach ([['Cart', 'cart.index'], ['Checkout', 'checkout.show'], ['Confirmation', null]] as $i => [$label, $route])
-                    <li class="flex items-center {{ $i > 0 ? 'flex-1' : '' }}">
-                        @if ($i > 0)
-                            <div class="flex-1 h-px mx-2 {{ $i === 1 ? 'bg-[#10498c]' : 'bg-slate-200' }}"></div>
-                        @endif
-                        <span class="flex items-center gap-2 font-medium
-                                     {{ $i === 0 ? 'text-[#10498c]' : 'text-slate-400' }}">
-                            <span class="w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold
-                                         {{ $i === 0 ? 'bg-[#10498c] text-white' : 'bg-slate-200 text-slate-500' }}">
-                                {{ $i + 1 }}
-                            </span>
-                            <span class="hidden sm:inline">{{ $label }}</span>
-                        </span>
-                    </li>
-                @endforeach
-            </ol>
-        </div>
+
+{{-- ── Progress steps ── --}}
+<div class="progress-bar-wrap" style="background:var(--white);border-bottom:1px solid var(--border);padding:.85rem 0">
+    <div class="sc">
+        <ol style="display:flex;align-items:center;gap:0;list-style:none;margin:0;padding:0">
+            @foreach([['Cart','cart.index'],['Checkout','checkout.show'],['Confirmation',null]] as $i => [$label,$rt])
+                <li style="display:flex;align-items:center;{{ $i > 0 ? 'flex:1' : '' }}">
+                    @if($i > 0)
+                        <div style="flex:1;height:2px;margin:0 .6rem;background:{{ $i===1 ? 'var(--blue)' : 'var(--border)' }}"></div>
+                    @endif
+                    <span style="display:inline-flex;align-items:center;gap:.5rem;font-size:.82rem;font-weight:600;
+                                 color:{{ $i===0 ? 'var(--blue)' : 'var(--slate-400)' }}">
+                        <span style="width:1.6rem;height:1.6rem;display:flex;align-items:center;justify-content:center;
+                                     border-radius:50%;font-size:.72rem;font-weight:800;
+                                     background:{{ $i===0 ? 'var(--blue)' : 'var(--border)' }};
+                                     color:{{ $i===0 ? 'white' : 'var(--slate-500)' }}">{{ $i+1 }}</span>
+                        <span style="display:none" class="step-label">{{ $label }}</span>
+                    </span>
+                </li>
+            @endforeach
+        </ol>
     </div>
+</div>
 
-    <section class="py-10">
-        <div class="site-container">
-            @if (session('error'))
-                <div class="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">{{ session('error') }}</div>
-            @endif
-            @if (session('success'))
-                <div class="mb-6 p-4 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">{{ session('success') }}</div>
-            @endif
+<section class="section" style="padding-top:2.25rem">
+    <div class="sc">
 
-            @if ($items->isEmpty())
-                {{-- Empty state --}}
-                <div class="flex flex-col items-center py-24 text-center">
-                    <div class="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mb-5">
-                        <svg width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" class="text-slate-400" aria-hidden="true">
-                            <path stroke-linecap="round" d="M2 3h2l2 12h13l2-8H6M9 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/>
-                        </svg>
-                    </div>
-                    <h2 class="text-xl font-semibold text-slate-700 mb-2">Your cart is empty</h2>
-                    <p class="text-slate-500 text-sm mb-6">Looks like you haven't added anything yet.</p>
-                    <a href="{{ route('shop.index') }}"
-                       class="px-6 py-3 rounded-xl bg-[#10498c] text-white font-semibold hover:bg-[#082f57] transition-colors">
-                        Browse products
-                    </a>
+        {{-- Alerts --}}
+        @if(session('error'))
+            <div class="alert alert-error" style="margin-bottom:1.5rem">
+                <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/></svg>
+                {{ session('error') }}
+            </div>
+        @endif
+        @if(session('success'))
+            <div class="alert alert-success" style="margin-bottom:1.5rem">
+                <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+                {{ session('success') }}
+            </div>
+        @endif
+
+        @if($items->isEmpty())
+            {{-- ── Empty state ── --}}
+            <div style="text-align:center;padding:6rem 2rem">
+                <div style="width:5.5rem;height:5.5rem;border-radius:50%;
+                            background:var(--blue-light);
+                            display:flex;align-items:center;justify-content:center;
+                            margin:0 auto 1.75rem">
+                    <svg width="36" height="36" fill="none" stroke="var(--blue)" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" d="M2 3h2l2 12h13l2-8H6M9 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/>
+                    </svg>
                 </div>
-            @else
-                @if ($hasStockIssues)
-                    <div class="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-start gap-3">
-                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="shrink-0 mt-0.5" aria-hidden="true"><path stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-                        Some items have stock issues. Update quantities before checkout.
-                    </div>
-                @endif
+                <h2 style="font-size:1.25rem;font-weight:800;color:var(--slate-800);margin-bottom:.5rem">Your cart is empty</h2>
+                <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:2rem">
+                    Browse our flour and grain products and add something to your cart.
+                </p>
+                <a href="{{ route('shop.index') }}" class="btn btn-primary">Browse Products</a>
+            </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {{-- Cart items --}}
-                    <div class="lg:col-span-2 flex flex-col gap-4">
-                        @foreach ($items as $row)
-                            @php $item = $row['item']; $product = $row['product']; @endphp
-                            <article class="flex gap-4 p-4 bg-white rounded-2xl border
-                                            {{ ! $row['stock_ok'] ? 'border-red-200 bg-red-50/30' : 'border-slate-100' }}
-                                            shadow-sm">
-                                {{-- Thumbnail --}}
-                                <div class="w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-gradient-to-br from-blue-50 to-amber-50 flex items-center justify-center">
-                                    @if ($product && $product->primaryImageUrl())
-                                        <img src="{{ $product->primaryImageUrl() }}" alt="{{ $item['name'] }}" class="w-full h-full object-cover">
-                                    @else
-                                        <svg width="28" height="28" viewBox="0 0 64 64" fill="none" class="opacity-25" aria-hidden="true">
-                                            <path d="M32 8C18 8 8 20 8 32s10 24 24 24 24-10 24-24S46 8 32 8z" fill="#10498c"/>
-                                        </svg>
-                                    @endif
-                                </div>
+        @else
 
-                                {{-- Info --}}
-                                <div class="flex-1 min-w-0">
-                                    <h3 class="text-sm font-semibold text-slate-800 truncate">
-                                        @if ($product)
-                                            <a href="{{ route('shop.show', $product) }}" class="hover:text-[#10498c] transition-colors">{{ $item['name'] }}</a>
-                                        @else
-                                            {{ $item['name'] }}
-                                        @endif
-                                    </h3>
-                                    <p class="text-xs text-slate-500 mt-0.5">{{ number_format($item['unit_price']) }} RWF each</p>
-                                    @if (! $row['stock_ok'])
-                                        <p class="text-xs text-red-600 mt-1 flex items-center gap-1">
-                                            <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM9 9a1 1 0 0 0 0 2v3a1 1 0 0 0 2 0V9H9z" clip-rule="evenodd"/></svg>
-                                            Only {{ $row['available_stock'] }} available
-                                        </p>
-                                    @endif
+            @if($hasStockIssues)
+                <div class="alert alert-warning" style="margin-bottom:1.5rem">
+                    <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/></svg>
+                    Some items have stock issues — please adjust quantities before checkout.
+                </div>
+            @endif
 
-                                    {{-- Quantity stepper + actions --}}
-                                    <div class="flex items-center gap-2 mt-3">
-                                        <form method="POST" action="{{ route('cart.update', $item['product_id']) }}" class="flex items-center">
-                                            @csrf @method('PATCH')
-                                            <div class="flex items-center border border-slate-200 rounded-lg overflow-hidden">
-                                                <button type="button"
-                                                        onclick="const i=this.nextElementSibling;i.value=Math.max(0,+i.value-1);this.form.submit()"
-                                                        class="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors font-bold">−</button>
-                                                <input type="number" name="quantity" value="{{ $item['quantity'] }}"
-                                                       min="0" max="{{ $row['available_stock'] }}"
-                                                       class="w-10 h-8 text-center text-sm border-0 focus:outline-none font-medium">
-                                                <button type="button"
-                                                        onclick="const i=this.previousElementSibling;i.value=Math.min({{ $row['available_stock'] }},+i.value+1);this.form.submit()"
-                                                        class="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors font-bold">+</button>
-                                            </div>
-                                        </form>
+            {{-- ── Cart + Summary grid ── --}}
+            <div class="cart-layout">
 
-                                        <form method="POST" action="{{ route('cart.remove', $item['product_id']) }}">
-                                            @csrf @method('DELETE')
-                                            <button type="submit"
-                                                    class="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                                    aria-label="Remove">
-                                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M18 6 6 18M6 6l12 12"/></svg>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
+                {{-- ── Items column ── --}}
+                <div style="display:flex;flex-direction:column;gap:1rem">
 
-                                {{-- Line total --}}
-                                <div class="text-right shrink-0">
-                                    <span class="text-sm font-bold text-slate-800">{{ number_format($row['line_total']) }} RWF</span>
-                                </div>
-                            </article>
-                        @endforeach
+                    {{-- Column header --}}
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:.75rem;border-bottom:1px solid var(--border)">
+                        <h1 style="font-size:1.1rem;font-weight:800;color:var(--slate-900)">
+                            Cart
+                            <span style="margin-left:.5rem;font-size:.78rem;font-weight:600;
+                                         padding:.2rem .65rem;border-radius:99px;
+                                         background:var(--blue-light);color:var(--blue)">
+                                {{ $items->count() }} item{{ $items->count()!==1?'s':'' }}
+                            </span>
+                        </h1>
+                        <a href="{{ route('shop.index') }}"
+                           style="font-size:.8rem;font-weight:600;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:.3rem">
+                            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/></svg>
+                            Continue shopping
+                        </a>
                     </div>
 
-                    {{-- Order summary --}}
-                    <aside class="lg:sticky lg:top-24 self-start">
-                        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                            <h2 class="text-base font-bold text-slate-900 mb-4">Order Summary</h2>
-                            <div class="flex items-center justify-between py-3 border-b border-slate-100">
-                                <span class="text-sm text-slate-600">Subtotal</span>
-                                <strong class="text-sm font-semibold text-slate-900">{{ number_format($subtotal) }} RWF</strong>
-                            </div>
-                            <div class="mt-4 flex flex-col gap-2">
-                                @if ($hasStockIssues)
-                                    <span class="flex items-center justify-center px-5 py-3 rounded-xl bg-slate-200 text-slate-500 text-sm font-semibold cursor-not-allowed">
-                                        Proceed to checkout
-                                    </span>
+                    @foreach($items as $row)
+                        @php $item = $row['item']; $product = $row['product']; @endphp
+                        <article style="display:flex;gap:1rem;padding:1.1rem;
+                                        background:{{ !$row['stock_ok'] ? '#fef2f2' : 'var(--white)' }};
+                                        border:1px solid {{ !$row['stock_ok'] ? '#fecaca' : 'var(--border)' }};
+                                        border-radius:var(--radius-lg);
+                                        box-shadow:var(--shadow-sm);
+                                        align-items:flex-start">
+
+                            {{-- Thumbnail --}}
+                            <div style="width:5rem;height:5rem;flex-shrink:0;border-radius:var(--radius);
+                                        overflow:hidden;border:1px solid var(--border);
+                                        background:linear-gradient(135deg,var(--blue-light),var(--copper-light));
+                                        display:flex;align-items:center;justify-content:center">
+                                @if($product && $product->primaryImageUrl())
+                                    <img src="{{ $product->primaryImageUrl() }}" alt="{{ $item['name'] }}"
+                                         style="width:100%;height:100%;object-fit:cover">
                                 @else
-                                    <a href="{{ route('checkout.show') }}"
-                                       class="flex items-center justify-center gap-2 px-5 py-3 rounded-xl
-                                              bg-[#10498c] text-white font-semibold text-sm hover:bg-[#082f57] transition-colors">
-                                        Proceed to checkout
-                                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="m9 18 6-6-6-6"/></svg>
-                                    </a>
+                                    <svg width="26" height="26" viewBox="0 0 64 64" fill="none" style="opacity:.3" aria-hidden="true">
+                                        <circle cx="32" cy="32" r="20" fill="var(--blue)"/>
+                                        <circle cx="32" cy="32" r="12" fill="var(--copper)"/>
+                                    </svg>
                                 @endif
-                                <a href="{{ route('shop.index') }}"
-                                   class="flex items-center justify-center px-5 py-3 rounded-xl border border-slate-200
-                                          text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors">
-                                    Continue shopping
-                                </a>
                             </div>
-                        </div>
-                    </aside>
+
+                            {{-- Info --}}
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:.9375rem;font-weight:700;color:var(--slate-900);margin-bottom:.2rem;
+                                            white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                                    @if($product)
+                                        <a href="{{ route('shop.show', $product) }}"
+                                           style="color:inherit;text-decoration:none;transition:color .15s"
+                                           onmouseover="this.style.color='var(--blue)'"
+                                           onmouseout="this.style.color='inherit'">{{ $item['name'] }}</a>
+                                    @else
+                                        {{ $item['name'] }}
+                                    @endif
+                                </div>
+                                <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.65rem">
+                                    {{ number_format($item['unit_price']) }} RWF per unit
+                                </div>
+
+                                @if(!$row['stock_ok'])
+                                    <div style="font-size:.75rem;color:#dc2626;margin-bottom:.5rem;display:flex;align-items:center;gap:.35rem;font-weight:600">
+                                        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/></svg>
+                                        Only {{ $row['available_stock'] }} in stock
+                                    </div>
+                                @endif
+
+                                {{-- Stepper + remove --}}
+                                <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+                                    <form method="POST" action="{{ route('cart.update', $item['product_id']) }}"
+                                          style="display:inline-flex;align-items:center">
+                                        @csrf @method('PATCH')
+                                        <div style="display:inline-flex;align-items:center;border:1.5px solid var(--border);
+                                                    border-radius:var(--radius-sm);overflow:hidden;background:var(--white)">
+                                            <button type="button"
+                                                    onclick="const i=this.nextElementSibling;i.value=Math.max(0,+i.value-1);this.form.submit()"
+                                                    style="width:2.2rem;height:2.2rem;border:none;background:transparent;
+                                                           font-size:1.1rem;font-weight:700;color:var(--slate-500);cursor:pointer"
+                                                    onmouseover="this.style.background='var(--slate-100)'"
+                                                    onmouseout="this.style.background='transparent'"
+                                                    aria-label="Decrease">−</button>
+                                            <input type="number" name="quantity" value="{{ $item['quantity'] }}"
+                                                   min="0" max="{{ $row['available_stock'] }}"
+                                                   style="width:2.75rem;height:2.2rem;border:none;
+                                                          border-left:1.5px solid var(--border);
+                                                          border-right:1.5px solid var(--border);
+                                                          text-align:center;font-size:.875rem;font-weight:700;
+                                                          color:var(--text);font-family:var(--font)"
+                                                   aria-label="Quantity">
+                                            <button type="button"
+                                                    onclick="const i=this.previousElementSibling;i.value=Math.min({{ $row['available_stock'] }},+i.value+1);this.form.submit()"
+                                                    style="width:2.2rem;height:2.2rem;border:none;background:transparent;
+                                                           font-size:1.1rem;font-weight:700;color:var(--slate-500);cursor:pointer"
+                                                    onmouseover="this.style.background='var(--slate-100)'"
+                                                    onmouseout="this.style.background='transparent'"
+                                                    aria-label="Increase">+</button>
+                                        </div>
+                                    </form>
+
+                                    <form method="POST" action="{{ route('cart.remove', $item['product_id']) }}">
+                                        @csrf @method('DELETE')
+                                        <button type="submit"
+                                                style="width:2.2rem;height:2.2rem;border:1.5px solid var(--border);
+                                                       border-radius:var(--radius-sm);background:transparent;
+                                                       cursor:pointer;display:flex;align-items:center;justify-content:center;
+                                                       color:var(--slate-400);transition:all .15s"
+                                                onmouseover="this.style.background='#fef2f2';this.style.borderColor='#fecaca';this.style.color='#dc2626'"
+                                                onmouseout="this.style.background='transparent';this.style.borderColor='var(--border)';this.style.color='var(--slate-400)'"
+                                                aria-label="Remove item">
+                                            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            {{-- Line total --}}
+                            <div style="flex-shrink:0;text-align:right;padding-left:.25rem">
+                                <div style="font-size:1rem;font-weight:900;color:var(--blue)">
+                                    {{ number_format($row['line_total']) }}
+                                </div>
+                                <div style="font-size:.7rem;color:var(--text-muted);font-weight:500">RWF</div>
+                            </div>
+                        </article>
+                    @endforeach
                 </div>
-            @endif
-        </div>
-    </section>
+
+                {{-- ── Order summary ── --}}
+                <aside style="position:sticky;top:calc(var(--header-h) + 1.5rem);align-self:start">
+                    <div style="background:var(--white);border:1px solid var(--border);
+                                border-radius:var(--radius-xl);box-shadow:var(--shadow);overflow:hidden">
+
+                        {{-- Header --}}
+                        <div style="padding:1.25rem 1.5rem;background:linear-gradient(135deg,var(--blue),var(--blue-dark));
+                                    color:white">
+                            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                                        opacity:.75;margin-bottom:.25rem">Summary</div>
+                            <div style="font-size:1.1rem;font-weight:800">Order Summary</div>
+                        </div>
+
+                        <div style="padding:1.25rem 1.5rem">
+                            {{-- Subtotal row --}}
+                            <div style="display:flex;align-items:center;justify-content:space-between;
+                                        padding:.75rem 0;border-bottom:1px solid var(--border);margin-bottom:.75rem">
+                                <span style="font-size:.875rem;color:var(--text-muted)">Subtotal</span>
+                                <strong style="font-size:1rem;font-weight:800;color:var(--slate-900)">
+                                    {{ number_format($subtotal) }} RWF
+                                </strong>
+                            </div>
+
+                            {{-- Shipping note --}}
+                            <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.25rem;
+                                        padding:.65rem;border-radius:var(--radius-sm);background:var(--slate-50);
+                                        display:flex;align-items:flex-start;gap:.5rem">
+                                <svg width="14" height="14" fill="none" stroke="var(--blue)" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:.1rem"><path stroke-linecap="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25"/></svg>
+                                Delivery cost confirmed at checkout
+                            </div>
+
+                            {{-- CTA --}}
+                            @if($hasStockIssues)
+                                <div style="display:flex;align-items:center;justify-content:center;
+                                            padding:.9rem 1.25rem;border-radius:var(--radius);
+                                            background:var(--slate-100);color:var(--slate-400);
+                                            font-size:.875rem;font-weight:700;cursor:not-allowed">
+                                    Fix stock issues first
+                                </div>
+                            @else
+                                <a href="{{ route('checkout.show') }}"
+                                   style="display:flex;align-items:center;justify-content:center;gap:.5rem;
+                                          padding:.9rem 1.25rem;border-radius:var(--radius);
+                                          background:var(--blue);color:white;
+                                          font-size:.9rem;font-weight:700;text-decoration:none;
+                                          transition:background .15s;box-shadow:0 4px 14px rgba(16,73,140,.3)"
+                                   onmouseover="this.style.background='var(--blue-dark)'"
+                                   onmouseout="this.style.background='var(--blue)'">
+                                    Proceed to Checkout
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="m9 18 6-6-6-6"/></svg>
+                                </a>
+                            @endif
+
+                            <a href="{{ route('shop.index') }}"
+                               style="display:flex;align-items:center;justify-content:center;
+                                      padding:.75rem;margin-top:.65rem;border-radius:var(--radius);
+                                      border:1.5px solid var(--border);color:var(--slate-600);
+                                      font-size:.84rem;font-weight:600;text-decoration:none;
+                                      transition:all .15s"
+                               onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'"
+                               onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--slate-600)'">
+                                Continue Shopping
+                            </a>
+                        </div>
+
+                        {{-- Trust strip --}}
+                        <div style="padding:.85rem 1.5rem;background:var(--slate-50);border-top:1px solid var(--border);
+                                    display:flex;flex-direction:column;gap:.4rem">
+                            @foreach([['Secure checkout','M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z'],['100% local product','M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z']] as [$trust,$path])
+                                <div style="display:flex;align-items:center;gap:.5rem;font-size:.75rem;color:var(--text-muted);font-weight:500">
+                                    <svg width="13" height="13" fill="none" stroke="var(--blue)" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="{{ $path }}"/></svg>
+                                    {{ $trust }}
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        @endif
+    </div>
+</section>
+
 @endsection
