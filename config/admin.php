@@ -59,6 +59,13 @@ return [
                 ['label' => 'Orders', 'route' => 'admin.orders.index', 'icon' => 'cart'],
             ],
         ],
+        [
+            'group' => 'Website Content',
+            'items' => [
+                ['label' => 'Events', 'route' => 'admin.events.index', 'icon' => 'package'],
+                ['label' => 'Training Modules', 'route' => 'admin.trainings.index', 'icon' => 'chart'],
+            ],
+        ],
     ],
 
     'stat_icons' => [

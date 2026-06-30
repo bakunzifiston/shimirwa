@@ -7,6 +7,8 @@ use App\Http\Controllers\Site\CheckoutController;
 use App\Http\Controllers\Site\ContactController;
 use App\Http\Controllers\Site\HomeController;
 use App\Http\Controllers\Site\ShopController;
+use App\Http\Controllers\Site\EventController;
+use App\Http\Controllers\Site\TrainingController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/media/{path}', [MediaController::class, 'show'])
@@ -31,3 +33,9 @@ Route::get('/checkout/success/{order}', [CheckoutController::class, 'success'])
 
 Route::get('/contact', [ContactController::class, 'show'])->name('contact');
 Route::post('/contact', [ContactController::class, 'store'])->name('contact.store');
+
+Route::get('/training', [TrainingController::class, 'index'])->name('training.index');
+Route::get('/training/{training:slug}', [TrainingController::class, 'show'])->name('training.show');
+
+Route::get('/events', [EventController::class, 'index'])->name('events.index');
+Route::get('/events/{event:slug}', [EventController::class, 'show'])->name('events.show');

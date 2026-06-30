@@ -17,6 +17,8 @@ use App\Http\Controllers\Admin\Settings\CatalogSettingsController;
 use App\Http\Controllers\Admin\Settings\PackagingCatalogController;
 use App\Http\Controllers\Admin\Settings\ProductCatalogController;
 use App\Http\Controllers\Admin\SortingController;
+use App\Http\Controllers\Admin\EventController;
+use App\Http\Controllers\Admin\TrainingController;
 use App\Http\Controllers\Admin\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -45,6 +47,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         Route::resource('products', ProductController::class);
         Route::resource('orders', OrderController::class)->only(['index', 'show', 'update']);
+        Route::resource('trainings', TrainingController::class);
+        Route::delete('trainings/{training}/media/{media}', [TrainingController::class, 'destroyMedia'])
+            ->name('trainings.media.destroy');
+
+        Route::resource('events', EventController::class);
+        Route::delete('events/{event}/media/{media}', [EventController::class, 'destroyMedia'])
+            ->name('events.media.destroy');
 
         Route::prefix('settings')->name('settings.')->group(function () {
             Route::get('/', [CatalogSettingsController::class, 'index'])->name('index');

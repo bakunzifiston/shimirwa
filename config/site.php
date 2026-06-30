@@ -3,15 +3,15 @@
 return [
 
     'name' => 'SHIMIRWA COMPANY Ltd',
-    'tagline' => 'Empowering local agriculture through high-quality processing, efficient supply chains, and reliable distribution.',
+    'tagline' => 'We source raw grains from Rwandan farmers, sort, roast, and mill them into premium flour — delivered fresh to households, retailers, and institutions.',
     'logo' => env('ADMIN_LOGO', 'images/shimirwa-logo.jpg'),
 
     'hero' => [
-        'eyebrow' => 'Welcome',
-        'headline' => 'Welcome to SHIMIRWA COMPANY Ltd',
-        'lead' => 'Empowering local agriculture through high-quality processing, efficient supply chains, and reliable distribution.',
-        'description' => 'At SHIMIRWA COMPANY Ltd, we specialize in sourcing, processing, and packaging premium agricultural products such as maize, sorghum, and soy.',
-        'card_text' => 'Maize · Sorghum · Soy',
+        'eyebrow' => 'Farm-to-Flour · Grain Milling · Rwanda',
+        'headline' => "From Rwanda's Farms\nto Premium Flour",
+        'lead' => 'We collect maize, soybeans, sorghum, and wheat directly from local farmers — then sort, roast, and mill them into high-quality flour products under the BINO and KURA brands.',
+        'description' => 'At SHIMIRWA COMPANY Ltd, we partner with smallholder farmers to source raw grains, then apply careful sorting, roasting, and milling processes to produce premium flour for households, retailers, and institutions across Rwanda.',
+        'card_text' => 'Maize · Soybeans · Sorghum · Wheat',
     ],
 
     'banners' => [
@@ -27,24 +27,25 @@ return [
 
     'mission' => [
         'title' => 'Our Mission',
-        'text' => 'To process and deliver high-quality agricultural products while supporting local producers and ensuring food safety.',
+        'text' => 'To collect raw grains from Rwandan farmers, process them through sorting, roasting, and milling, and deliver premium flour products that meet the highest quality and nutrition standards.',
     ],
 
     'vision' => [
         'title' => 'Our Vision',
-        'text' => 'To become a leading agro-processing company in East Africa known for quality, innovation, and impact.',
+        'text' => 'To become the leading grain-to-flour milling company in East Africa — known for traceable sourcing, consistent quality, and lasting impact on farming communities.',
     ],
 
     'contact' => [
-        'email' => env('SITE_CONTACT_EMAIL', 'info@shimirwaltd.rw'),
-        'phone' => env('SITE_CONTACT_PHONE', '+250 788 000 000'),
-        'address' => 'Kigali, Rwanda',
+        'email' => env('SITE_CONTACT_EMAIL', 'shimirwacompanyltd@gmail.com'),
+        'phone' => env('SITE_CONTACT_PHONE', '+250 788 841 446'),
+        'phone2' => '+250 788 503 588',
+        'address' => 'Rulindo District, Northern Province, Rwanda',
         'map_embed' => 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d255948.261439353!2d30.061885!3d-1.970579!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x19dcaefe8c04c0b1%3A0x5fa6f4272e6fae1!2sKigali%2C%20Rwanda!5e0!3m2!1sen!2s!4v1700000000000!5m2!1sen!2s',
     ],
 
     'social' => [
         ['label' => 'Facebook', 'url' => '#', 'icon' => 'facebook'],
-        ['label' => 'Instagram', 'url' => '#', 'icon' => 'instagram'],
+        ['label' => 'Instagram', 'url' => 'https://www.instagram.com/shimirwacompany/', 'icon' => 'instagram'],
         ['label' => 'LinkedIn', 'url' => '#', 'icon' => 'linkedin'],
     ],
 
@@ -52,6 +53,8 @@ return [
         ['label' => 'Home', 'route' => 'home'],
         ['label' => 'About Us', 'route' => 'about'],
         ['label' => 'Shop', 'route' => 'shop.index'],
+        ['label' => 'Training', 'route' => 'training.index'],
+        ['label' => 'Events', 'route' => 'events.index'],
         ['label' => 'Contact Us', 'route' => 'contact'],
     ],
 
@@ -66,7 +69,7 @@ return [
         'hero_eyebrow' => 'About Us',
         'hero_title' => 'SHIMIRWA COMPANY Ltd',
         'who_we_are_title' => 'Who We Are',
-        'who_we_are' => 'SHIMIRWA COMPANY Ltd is a proudly Rwandan agri-business dedicated to adding value to local produce and driving agricultural transformation. By working hand-in-hand with smallholder farmers and cooperatives, we create fair market opportunities, promote sustainable practices, and ensure traceability from farm to shelf.',
+        'who_we_are' => 'SHIMIRWA COMPANY Ltd is a proudly Rwandan agri-processing company that takes raw grains — maize, soybeans, sorghum, and wheat — directly from local farmers and transforms them into premium flour through our in-house sorting, roasting, and milling facility in Rulindo District. We bridge the gap between Rwandan farms and household tables, creating fair market access for smallholder farmers while delivering consistent, traceable flour products under the BINO and KURA brands.',
         'values_title' => 'Our Core Values',
         'values' => [
             [
