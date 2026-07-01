@@ -160,9 +160,8 @@ class RoastingController extends Controller
         ];
     }
 
-    protected function availableRawStocks(?int $includeId = null)
+    protected function mapPayload(array $data): array
     {
-        // source_batch is "raw:ID" or "sorting:ID" — split it out
         $sourceBatch = $data['source_batch'] ?? $data['_source_batch_hint'] ?? '';
         unset($data['source_batch'], $data['_source_batch_hint'], $data['source_type'], $data['allocations']);
 
@@ -172,6 +171,20 @@ class RoastingController extends Controller
         $data['sorting_id']            = $type === 'sorting' ? $id : null;
 
         return $data;
+    }
+
+    protected function availableRawStocks(?int $includeId = null)
+    {
+        $roastableItems = ProductCatalog::active()->production()->requiresRoasting()->pluck('name');
+        $sortOnlyFirst  = ProductCatalog::active()->production()->requiresSorting()->pluck('name');
+
+        return RawMaterialStock::query()
+            ->where('quantity_in', '>', 0)
+            ->when($roastableItems->isNotEmpty(), fn ($q) => $q->whereIn('item', $roastableItems))
+            ->when($sortOnlyFirst->isNotEmpty(),  fn ($q) => $q->whereNotIn('item', $sortOnlyFirst))
+            ->when($includeId, fn ($q) => $q->orWhere('id', $includeId))
+            ->orderByDesc('date')
+            ->get();
     }
 
     protected function availableSortingStocks(?int $includeId = null)
