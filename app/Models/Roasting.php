@@ -62,6 +62,14 @@ class Roasting extends Model
         return $this->belongsTo(Sorting::class, 'sorting_id');
     }
 
+    public function hasDownstreamUsage(): bool
+    {
+        return Milling::whereJsonContains('items', [
+            'source'   => 'roasting',
+            'stock_id' => $this->id,
+        ])->exists();
+    }
+
     // Usable output after loss — used by Milling to check available stock
     public function getQuantityOutAttribute(): float
     {
@@ -121,51 +129,6 @@ class Roasting extends Model
                     ->where('id', $roasting->sorting_id)
                     ->decrement('quantity_in', $roasting->quantity_in);
             }
-        });
-
-        static::deleted(function ($roasting) {
-            if ($roasting->raw_material_stock_id) {
-                DB::table('raw_material_stocks')
-                    ->where('id', $roasting->raw_material_stock_id)
-                    ->increment('quantity_in', $roasting->quantity_in);
-            } elseif ($roasting->sorting_id) {
-                DB::table('sortings')
-                    ->where('id', $roasting->sorting_id)
-                    ->increment('quantity_in', $roasting->quantity_in);
-            }
-
-            $oldGross = (float) $roasting->getOriginal('quantity_in');
-            $newGross = (float) $roasting->quantity_in;
-
-            DB::transaction(function () use ($roasting, $oldGross, $newGross) {
-                self::adjustSourceStock(
-                    $roasting->getOriginal('raw_material_stock_id'),
-                    $roasting->getOriginal('sorting_id'),
-                    $oldGross
-                );
-
-                $stock = self::findSource($roasting->raw_material_stock_id, $roasting->sorting_id, true);
-                $available = $roasting->sorting_id
-                    ? $stock->remainingUsable()
-                    : $stock->remainingQuantity();
-
-                if ($available < $newGross) {
-                    self::adjustSourceStock(
-                        $roasting->getOriginal('raw_material_stock_id'),
-                        $roasting->getOriginal('sorting_id'),
-                        -$oldGross
-                    );
-                    throw new \Exception('Not enough stock available for this roasting.');
-                }
-
-                self::adjustSourceStock(
-                    $roasting->raw_material_stock_id,
-                    $roasting->sorting_id,
-                    -$newGross
-                );
-
-                $roasting->refreshPipelineBatchRemaining();
-            });
         });
 
         static::deleting(function (Roasting $roasting) {

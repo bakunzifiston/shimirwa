@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin\Roasting;
 use App\Models\RawMaterialStock;
 use App\Models\Sorting;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class StoreRoastingRequest extends FormRequest
 {

@@ -99,14 +99,13 @@ class Milling extends Model
     protected static function booted()
     {
         static::creating(function ($milling) {
-            $items = self::normalizeMillingItems($milling->items);
             $total = 0;
             foreach ($milling->items ?? [] as $item) {
-                $qty    = floatval($item['quantity'] ?? 0);
-                $type   = $item['type']     ?? '';
+                $qty     = floatval($item['quantity'] ?? 0);
+                $source  = $item['source']   ?? '';
                 $stockId = (int) ($item['stock_id'] ?? 0);
-                if (!$qty || !$type || !$stockId) continue;
-                $batch = self::resolveBatch($type, $stockId);
+                if (!$qty || !$source || !$stockId) continue;
+                $batch = self::resolveBatch($source, $stockId);
                 $avail = $batch->remainingUsable();
                 if ($avail < $qty) throw new \Exception("Not enough stock in batch. Available: {$avail} kg.");
                 $total += $qty;
@@ -126,10 +125,10 @@ class Milling extends Model
         static::created(function ($milling) {
             foreach ($milling->items ?? [] as $item) {
                 $qty     = floatval($item['quantity'] ?? 0);
-                $type    = $item['type']     ?? '';
+                $source  = $item['source']   ?? '';
                 $stockId = (int) ($item['stock_id'] ?? 0);
-                if (!$qty || !$type || !$stockId) continue;
-                $batch = self::resolveBatch($type, $stockId);
+                if (!$qty || !$source || !$stockId) continue;
+                $batch = self::resolveBatch($source, $stockId);
                 $batch::withoutEvents(function () use ($batch, $qty) {
                     $batch->quantity_remaining = max($batch->remainingUsable() - $qty, 0);
                     $batch->save();
@@ -172,6 +171,38 @@ class Milling extends Model
                 self::applyItemDiff(self::normalizeMillingItems($milling->items), []);
             });
         });
+    }
+
+    private static function resolveBatch(string $source, int $stockId): Roasting|Sorting
+    {
+        return $source === 'roasting'
+            ? Roasting::findOrFail($stockId)
+            : Sorting::findOrFail($stockId);
+    }
+
+    private static function resolveBatchFromItem(array $item, bool $lock = false): Roasting|Sorting|null
+    {
+        $source  = $item['source']   ?? '';
+        $stockId = (int) ($item['stock_id'] ?? 0);
+
+        if (! $source || ! $stockId) {
+            return null;
+        }
+
+        $query = $source === 'roasting'
+            ? Roasting::where('id', $stockId)
+            : Sorting::where('id', $stockId);
+
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        return $query->first();
+    }
+
+    private static function itemKey(array $item): string
+    {
+        return ($item['source'] ?? '') . ':' . ($item['stock_id'] ?? '');
     }
 
     /**
