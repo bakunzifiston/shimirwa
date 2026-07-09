@@ -246,7 +246,7 @@ class Milling extends Model
 
             if (! $batch) {
                 throw new \Exception('Selected batch does not exist.');
-            }
+             }
 
             if ($diff > 0 && $batch->remainingUsable() < $diff) {
                 $label = $batch instanceof Roasting

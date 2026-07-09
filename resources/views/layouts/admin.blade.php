@@ -212,7 +212,8 @@
         function wireForms(container) {
             container.querySelectorAll('form[method="POST"]:not([onsubmit]), form[method="post"]:not([onsubmit])').forEach(form => {
                 // skip if already has _method DELETE (handled above)
-                if (form.querySelector('input[name="_method"]')) return;
+                const _m = form.querySelector('input[name="_method"]');
+                if (_m && _m.value.toUpperCase() === 'DELETE') return;
 
                 form.addEventListener('submit', function (e) {
                     e.preventDefault();

@@ -128,7 +128,7 @@
                     <span class="font-semibold db-revenue-today">{{ number_format($stock->quantity_in, 1) }} kg</span>
                 </td>
                 <td>{{ $stock->client?->full_name }}</td>
-                <td class="text-right" onclick="event.stopPropagation()">
+                <td class="text-right" onclick="if(!event.target.closest('[data-drawer-src]'))event.stopPropagation()">
                     <x-admin.row-actions
                         :view-route="route('admin.raw-material-stocks.show', $stock)"
                         :edit-route="route('admin.raw-material-stocks.edit', $stock)"
