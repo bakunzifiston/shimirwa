@@ -88,6 +88,11 @@ class RawMaterialStock extends Model
         return max((float) $this->quantity_in, 0);
     }
 
+    public function remainingUsable(): float
+    {
+        return max((float) $this->quantity_in, 0);
+    }
+
     public function initialNetQuantity(): float
     {
         return max((float) $this->received - (float) $this->rejected, 0);

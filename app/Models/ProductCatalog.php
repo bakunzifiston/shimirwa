@@ -17,6 +17,7 @@ class ProductCatalog extends Model
         'is_active',
         'requires_sorting',
         'requires_roasting',
+        'direct_to_milling',
         'sort_order',
     ];
 
@@ -26,6 +27,7 @@ class ProductCatalog extends Model
             'is_active'          => 'boolean',
             'requires_sorting'   => 'boolean',
             'requires_roasting'  => 'boolean',
+            'direct_to_milling'  => 'boolean',
             'sort_order'         => 'integer',
         ];
     }
@@ -58,5 +60,10 @@ class ProductCatalog extends Model
     public function scopeRequiresRoasting($query)
     {
         return $query->where('requires_roasting', true);
+    }
+
+    public function scopeDirectToMilling($query)
+    {
+        return $query->where('direct_to_milling', true);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin\Milling;
 
 use App\Models\ProductCatalog;
+use App\Models\RawMaterialStock;
 use App\Models\Roasting;
 use App\Models\Sorting;
 use Illuminate\Foundation\Http\FormRequest;
@@ -38,7 +39,7 @@ class StoreMillingRequest extends FormRequest
             'employee_id'                       => ['required', 'exists:employees,id'],
             'items'                             => ['required', 'array', 'min:1'],
             'items.*.type'                      => ['required', 'string', ...(count($catalogNames) ? ['in:' . implode(',', $catalogNames)] : [])],
-            'items.*.source'                    => ['required', 'in:roasting,sorting'],
+            'items.*.source'                    => ['required', 'in:roasting,sorting,raw'],
             'items.*.stock_id'                  => ['required', 'integer', 'min:1'],
             'items.*.quantity'                  => ['required', 'numeric', 'min:0.01'],
             'items.*.overflow'                  => ['sometimes', 'array'],
@@ -80,12 +81,12 @@ class StoreMillingRequest extends FormRequest
                     $aQty    = (float) $alloc['quantity'];
                     if (!$stockId || $aQty <= 0) continue;
 
-                    if ($source === 'roasting') {
-                        $batch = Roasting::find($stockId);
-                    } else {
-                        $batch = Sorting::find($stockId);
-                    }
-                    $avail = $batch ? (float) $batch->quantity_out : 0;
+                    $batch = match($source) {
+                        'roasting' => Roasting::find($stockId),
+                        'raw'      => RawMaterialStock::find($stockId),
+                        default    => Sorting::find($stockId),
+                    };
+                    $avail = $batch ? (float) $batch->remainingUsable() : 0;
 
                     if (!$batch) {
                         $validator->errors()->add("items.{$i}.stock_id", 'Selected batch not found.');

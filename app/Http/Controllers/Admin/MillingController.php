@@ -8,6 +8,7 @@ use App\Http\Requests\Admin\Milling\UpdateMillingRequest;
 use App\Models\Employee;
 use App\Models\Milling;
 use App\Models\ProductCatalog;
+use App\Models\RawMaterialStock;
 use App\Models\Roasting;
 use App\Models\Sorting;
 use Illuminate\Http\RedirectResponse;
@@ -153,16 +154,26 @@ class MillingController extends Controller
             ))
             ->orderByDesc('date')->get();
 
+        // Items that can go directly to milling (no sorting/roasting)
+        $directToMillingItems = ProductCatalog::active()->production()->directToMilling()->pluck('name');
+        $rawOptions = $directToMillingItems->isEmpty()
+            ? collect()
+            : RawMaterialStock::query()
+                ->where('quantity_in', '>', 0)
+                ->whereIn('item', $directToMillingItems)
+                ->orderByDesc('date')->get();
+
         // Only raw-material catalog items for the ingredient dropdown (exclude packaging)
         $catalogItems = ProductCatalog::active()->production()
             ->whereNotIn('sub_category', ['Packaging Material', 'packaging material', 'Packaging Staff', 'packaging staff'])
-            ->orderBy('sort_order')->orderBy('name')->get(['name', 'requires_roasting', 'requires_sorting']);
+            ->orderBy('sort_order')->orderBy('name')->get(['name', 'requires_roasting', 'requires_sorting', 'direct_to_milling']);
 
         return [
             'milling'         => $milling,
             'employees'       => Employee::orderBy('full_name')->get(),
             'roastingOptions' => $roastingOptions,
             'sortingOptions'  => $sortingOptions,
+            'rawOptions'      => $rawOptions,
             'catalogItems'    => $catalogItems,
         ];
     }
