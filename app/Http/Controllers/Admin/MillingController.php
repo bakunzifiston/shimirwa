@@ -136,18 +136,18 @@ class MillingController extends Controller
             ->where('requires_roasting', false)
             ->pluck('name');
 
-        // Roasting batches with usable output (quantity_in - loss > 0)
+        // Roasting batches with remaining usable stock
         $roastingOptions = Roasting::with(['rawMaterialStock', 'sorting.rawMaterialStock'])
-            ->whereRaw('quantity_in - COALESCE(loss, 0) > 0')
+            ->whereRaw('COALESCE(quantity_remaining, quantity_in - COALESCE(loss, 0)) > 0')
             ->when($roastableItems->isNotEmpty(), fn ($q) => $q->where(function ($q2) use ($roastableItems) {
                 $q2->whereHas('rawMaterialStock', fn ($s) => $s->whereIn('item', $roastableItems))
                    ->orWhereHas('sorting.rawMaterialStock', fn ($s) => $s->whereIn('item', $roastableItems));
             }))
             ->orderByDesc('date')->get();
 
-        // Sorting batches for items that skip roasting
+        // Sorting batches with remaining usable stock
         $sortingOptions = Sorting::with('rawMaterialStock')
-            ->where('quantity_in', '>', 0)
+            ->whereRaw('COALESCE(quantity_remaining, quantity_in - COALESCE(loss, 0)) > 0')
             ->when($sortOnlyItems->isNotEmpty(), fn ($q) => $q->whereHas(
                 'rawMaterialStock', fn ($s) => $s->whereIn('item', $sortOnlyItems)
             ))

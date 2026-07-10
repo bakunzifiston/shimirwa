@@ -9,7 +9,7 @@
         $item  = $r->rawMaterialStock?->item
                ?? $r->sorting?->rawMaterialStock?->item
                ?? '—';
-        $avail = (float) $r->quantity_out;
+        $avail = (float) $r->remainingUsable();
         return [$r->id => [
             'item'  => $item,
             'batch' => $r->batch,
@@ -23,7 +23,7 @@
     $sortingMeta = $sortingOptions->mapWithKeys(function ($s) {
         $item  = $s->rawMaterialStock?->item ?? '—';
         $batch = $s->rawMaterialStock?->batch_number ?? "Sorting #{$s->id}";
-        $avail = (float) $s->quantity_out;
+        $avail = (float) $s->remainingUsable();
         return [$s->id => [
             'item'  => $item,
             'batch' => $batch,
@@ -40,7 +40,7 @@
         $item = $r->rawMaterialStock?->item ?? $r->sorting?->rawMaterialStock?->item ?? '—';
         $batchesByItem['roasting'][$item][] = [
             'id' => $r->id, 'batch' => $r->batch,
-            'qty' => (float) $r->quantity_out, 'date' => $r->date?->format('Y-m-d') ?? '',
+            'qty' => (float) $r->remainingUsable(), 'date' => $r->date?->format('Y-m-d') ?? '',
         ];
     }
     foreach ($sortingOptions->sortBy('date') as $s) {
@@ -48,7 +48,7 @@
         $batch = $s->rawMaterialStock?->batch_number ?? "Sorting #{$s->id}";
         $batchesByItem['sorting'][$item][] = [
             'id' => $s->id, 'batch' => $batch,
-            'qty' => (float) $s->quantity_out, 'date' => $s->date?->format('Y-m-d') ?? '',
+            'qty' => (float) $s->remainingUsable(), 'date' => $s->date?->format('Y-m-d') ?? '',
         ];
     }
 
