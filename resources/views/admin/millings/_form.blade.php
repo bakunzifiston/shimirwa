@@ -9,7 +9,7 @@
         $item  = $r->rawMaterialStock?->item
                ?? $r->sorting?->rawMaterialStock?->item
                ?? '—';
-        $avail = (float) $r->quantity_out;
+        $avail = (float) $r->remainingUsable();
         return [$r->id => [
             'item'  => $item,
             'batch' => $r->batch,
@@ -23,7 +23,7 @@
     $sortingMeta = $sortingOptions->mapWithKeys(function ($s) {
         $item  = $s->rawMaterialStock?->item ?? '—';
         $batch = $s->rawMaterialStock?->batch_number ?? "Sorting #{$s->id}";
-        $avail = (float) $s->quantity_out;
+        $avail = (float) $s->remainingUsable();
         return [$s->id => [
             'item'  => $item,
             'batch' => $batch,
@@ -33,14 +33,26 @@
         ]];
     });
 
+    // Raw material batches meta (direct-to-milling items): {id: {label, item, qty, date, batch}}
+    $rawMeta = $rawOptions->mapWithKeys(function ($s) {
+        $avail = (float) $s->remainingUsable();
+        return [$s->id => [
+            'item'  => $s->item,
+            'batch' => $s->batch_number,
+            'label' => $s->item . ' — ' . $s->batch_number . ' (' . number_format($avail, 1) . ' kg)',
+            'qty'   => $avail,
+            'date'  => $s->date?->format('Y-m-d') ?? '',
+        ]];
+    });
+
     // Group batches by item for overflow: {source: {item: [{id, batch, qty, date}, ...]}}
     // Oldest first so overflow goes to the next oldest batch
-    $batchesByItem = ['roasting' => [], 'sorting' => []];
+    $batchesByItem = ['roasting' => [], 'sorting' => [], 'raw' => []];
     foreach ($roastingOptions->sortBy('date') as $r) {
         $item = $r->rawMaterialStock?->item ?? $r->sorting?->rawMaterialStock?->item ?? '—';
         $batchesByItem['roasting'][$item][] = [
             'id' => $r->id, 'batch' => $r->batch,
-            'qty' => (float) $r->quantity_out, 'date' => $r->date?->format('Y-m-d') ?? '',
+            'qty' => (float) $r->remainingUsable(), 'date' => $r->date?->format('Y-m-d') ?? '',
         ];
     }
     foreach ($sortingOptions->sortBy('date') as $s) {
@@ -48,19 +60,26 @@
         $batch = $s->rawMaterialStock?->batch_number ?? "Sorting #{$s->id}";
         $batchesByItem['sorting'][$item][] = [
             'id' => $s->id, 'batch' => $batch,
-            'qty' => (float) $s->quantity_out, 'date' => $s->date?->format('Y-m-d') ?? '',
+            'qty' => (float) $s->remainingUsable(), 'date' => $s->date?->format('Y-m-d') ?? '',
+        ];
+    }
+    foreach ($rawOptions->sortBy('date') as $s) {
+        $batchesByItem['raw'][$s->item][] = [
+            'id' => $s->id, 'batch' => $s->batch_number,
+            'qty' => (float) $s->remainingUsable(), 'date' => $s->date?->format('Y-m-d') ?? '',
         ];
     }
 
-    // Catalog items meta: {name: {source: 'roasting'|'sorting'}}
+    // Catalog items meta: {name: {source: 'roasting'|'sorting'|'raw'}}
     $catalogMeta = $catalogItems->mapWithKeys(fn ($c) => [
-        $c->name => ['source' => $c->requires_roasting ? 'roasting' : 'sorting']
+        $c->name => ['source' => $c->requires_roasting ? 'roasting' : ($c->direct_to_milling ? 'raw' : 'sorting')]
     ]);
 @endphp
 
 <div id="milling-form"
      data-roasting-meta='@json($roastingMeta)'
      data-sorting-meta='@json($sortingMeta)'
+     data-raw-meta='@json($rawMeta)'
      data-catalog-meta='@json($catalogMeta)'
      data-batches-by-item='@json($batchesByItem)'>
 
@@ -127,6 +146,7 @@
 
     const roastingMeta  = JSON.parse(form.dataset.roastingMeta  || '{}');
     const sortingMeta   = JSON.parse(form.dataset.sortingMeta   || '{}');
+    const rawMeta       = JSON.parse(form.dataset.rawMeta       || '{}');
     const catalogMeta   = JSON.parse(form.dataset.catalogMeta   || '{}');
     const batchesByItem = JSON.parse(form.dataset.batchesByItem || '{}');
     const list          = form.querySelector('#ingredients-list');
@@ -136,7 +156,9 @@
     const initial       = @json($existingItems);
 
     function getMeta(source) {
-        return source === 'roasting' ? roastingMeta : sortingMeta;
+        if (source === 'roasting') return roastingMeta;
+        if (source === 'raw')      return rawMeta;
+        return sortingMeta;
     }
 
     // Build primary <option> list for a given source type, filtered to a specific item
@@ -212,6 +234,8 @@
             ? '<span class="ingredient-src-badge text-xs px-1.5 py-0.5 rounded font-medium" style="background:#ffedd5;color:#c2410c">from roasting</span>'
             : source === 'sorting'
             ? '<span class="ingredient-src-badge text-xs px-1.5 py-0.5 rounded font-medium" style="background:#dbeafe;color:#1e40af">from sorting</span>'
+            : source === 'raw'
+            ? '<span class="ingredient-src-badge text-xs px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d">direct to milling</span>'
             : '<span class="ingredient-src-badge"></span>';
 
         return `<div class="ingredient-row rounded-lg border p-3 space-y-2" style="border-color:var(--admin-border);background:var(--admin-bg)" data-index="${i}">
@@ -282,6 +306,10 @@
                     srcBadge.style.cssText = 'background:#dbeafe;color:#1e40af';
                     srcBadge.className = 'ingredient-src-badge text-xs px-1.5 py-0.5 rounded font-medium';
                     srcBadge.textContent = 'from sorting';
+                } else if (source === 'raw') {
+                    srcBadge.style.cssText = 'background:#dcfce7;color:#15803d';
+                    srcBadge.className = 'ingredient-src-badge text-xs px-1.5 py-0.5 rounded font-medium';
+                    srcBadge.textContent = 'direct to milling';
                 } else {
                     srcBadge.textContent = '';
                 }

@@ -47,27 +47,41 @@ class Milling extends Model
         // Collect IDs grouped by source to bulk-load
         $roastingIds = collect($items)->where('source', 'roasting')->pluck('stock_id')->map(fn($id) => (int)$id)->unique();
         $sortingIds  = collect($items)->where('source', 'sorting')->pluck('stock_id')->map(fn($id) => (int)$id)->unique();
+        $rawIds      = collect($items)->where('source', 'raw')->pluck('stock_id')->map(fn($id) => (int)$id)->unique();
 
         $roastings = Roasting::with(['rawMaterialStock', 'sorting.rawMaterialStock', 'chef'])
             ->whereIn('id', $roastingIds)->get()->keyBy('id');
         $sortings  = Sorting::with(['rawMaterialStock', 'employee'])
             ->whereIn('id', $sortingIds)->get()->keyBy('id');
+        $raws      = RawMaterialStock::with('client')
+            ->whereIn('id', $rawIds)->get()->keyBy('id');
 
-        return collect($items)->map(function ($item) use ($roastings, $sortings) {
+        return collect($items)->map(function ($item) use ($roastings, $sortings, $raws) {
             $source  = $item['source']   ?? '';
             $stockId = (int) ($item['stock_id'] ?? 0);
-            $batch   = $source === 'roasting' ? ($roastings[$stockId] ?? null) : ($sortings[$stockId] ?? null);
+            $batch   = match($source) {
+                'roasting' => $roastings[$stockId] ?? null,
+                'sorting'  => $sortings[$stockId]  ?? null,
+                'raw'      => $raws[$stockId]      ?? null,
+                default    => null,
+            };
 
             $itemName = $batch
-                ? ($source === 'roasting'
-                    ? ($batch->rawMaterialStock?->item ?? $batch->sorting?->rawMaterialStock?->item ?? '—')
-                    : ($batch->rawMaterialStock?->item ?? '—'))
+                ? match($source) {
+                    'roasting' => $batch->rawMaterialStock?->item ?? $batch->sorting?->rawMaterialStock?->item ?? '—',
+                    'sorting'  => $batch->rawMaterialStock?->item ?? '—',
+                    'raw'      => $batch->item ?? '—',
+                    default    => '—',
+                }
                 : ($item['type'] ?? '—');
 
             $batchRef = $batch
-                ? ($source === 'roasting'
-                    ? ($batch->batch ?? "Roasting #{$stockId}")
-                    : ($batch->rawMaterialStock?->batch_number ?? "Sorting #{$stockId}"))
+                ? match($source) {
+                    'roasting' => $batch->batch ?? "Roasting #{$stockId}",
+                    'sorting'  => $batch->rawMaterialStock?->batch_number ?? "Sorting #{$stockId}",
+                    'raw'      => $batch->batch_number ?? "Raw #{$stockId}",
+                    default    => "#{$stockId}",
+                }
                 : "#{$stockId}";
 
             return [
@@ -129,10 +143,17 @@ class Milling extends Model
                 $stockId = (int) ($item['stock_id'] ?? 0);
                 if (!$qty || !$source || !$stockId) continue;
                 $batch = self::resolveBatch($source, $stockId);
-                $batch::withoutEvents(function () use ($batch, $qty) {
-                    $batch->quantity_remaining = max($batch->remainingUsable() - $qty, 0);
-                    $batch->save();
-                });
+                if ($source === 'raw') {
+                    RawMaterialStock::withoutEvents(function () use ($batch, $qty) {
+                        $batch->quantity_in = max($batch->remainingUsable() - $qty, 0);
+                        $batch->save();
+                    });
+                } else {
+                    $batch::withoutEvents(function () use ($batch, $qty) {
+                        $batch->quantity_remaining = max($batch->remainingUsable() - $qty, 0);
+                        $batch->save();
+                    });
+                }
             }
         });
 
@@ -173,14 +194,16 @@ class Milling extends Model
         });
     }
 
-    private static function resolveBatch(string $source, int $stockId): Roasting|Sorting
+    private static function resolveBatch(string $source, int $stockId): Roasting|Sorting|RawMaterialStock
     {
-        return $source === 'roasting'
-            ? Roasting::findOrFail($stockId)
-            : Sorting::findOrFail($stockId);
+        return match($source) {
+            'roasting' => Roasting::findOrFail($stockId),
+            'sorting'  => Sorting::findOrFail($stockId),
+            default    => RawMaterialStock::findOrFail($stockId),
+        };
     }
 
-    private static function resolveBatchFromItem(array $item, bool $lock = false): Roasting|Sorting|null
+    private static function resolveBatchFromItem(array $item, bool $lock = false): Roasting|Sorting|RawMaterialStock|null
     {
         $source  = $item['source']   ?? '';
         $stockId = (int) ($item['stock_id'] ?? 0);
@@ -189,9 +212,11 @@ class Milling extends Model
             return null;
         }
 
-        $query = $source === 'roasting'
-            ? Roasting::where('id', $stockId)
-            : Sorting::where('id', $stockId);
+        $query = match($source) {
+            'roasting' => Roasting::where('id', $stockId),
+            'sorting'  => Sorting::where('id', $stockId),
+            default    => RawMaterialStock::where('id', $stockId),
+        };
 
         if ($lock) {
             $query->lockForUpdate();
@@ -246,19 +271,28 @@ class Milling extends Model
 
             if (! $batch) {
                 throw new \Exception('Selected batch does not exist.');
-            }
+             }
 
             if ($diff > 0 && $batch->remainingUsable() < $diff) {
                 $label = $batch instanceof Roasting
                     ? $batch->batch
-                    : ($batch->rawMaterialStock?->batch_number ?? "#{$batch->id}");
+                    : ($batch instanceof RawMaterialStock
+                        ? ($batch->batch_number ?? "Raw #{$batch->id}")
+                        : ($batch->rawMaterialStock?->batch_number ?? "#{$batch->id}"));
                 throw new \Exception("Not enough stock in batch {$label}. Available: {$batch->remainingUsable()} kg.");
             }
 
-            $batch::withoutEvents(function () use ($batch, $diff) {
-                $batch->quantity_remaining = max($batch->remainingUsable() - $diff, 0);
-                $batch->save();
-            });
+            if ($source === 'raw') {
+                RawMaterialStock::withoutEvents(function () use ($batch, $diff) {
+                    $batch->quantity_in = max($batch->remainingUsable() - $diff, 0);
+                    $batch->save();
+                });
+            } else {
+                $batch::withoutEvents(function () use ($batch, $diff) {
+                    $batch->quantity_remaining = max($batch->remainingUsable() - $diff, 0);
+                    $batch->save();
+                });
+            }
         }
     }
 }

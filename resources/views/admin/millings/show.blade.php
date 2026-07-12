@@ -66,18 +66,22 @@
     @else
         @foreach ($ingredients as $ing)
         @php
-            $batch  = $ing['batch'];
+            $batch   = $ing['batch'];
             $isRoast = $ing['source'] === 'roasting';
+            $isRaw   = $ing['source'] === 'raw';
         @endphp
         <div class="px-4 py-4 border-b last:border-0" style="border-color:var(--admin-border)">
             {{-- Row header --}}
             <div class="flex items-start justify-between gap-4 mb-2">
                 <div class="flex items-center gap-2">
                     <span class="text-sm font-semibold">{{ $ing['item_name'] }}</span>
-                    <span class="text-xs px-1.5 py-0.5 rounded font-medium"
-                          style="{{ $isRoast ? 'background:#ffedd5;color:#c2410c' : '' }}" class="{{ !$isRoast ? 'admin-badge admin-badge--primary' : '' }}">
-                        {{ $isRoast ? 'from roasting' : 'from sorting' }}
-                    </span>
+                    @if ($isRoast)
+                        <span class="text-xs px-1.5 py-0.5 rounded font-medium" style="background:#ffedd5;color:#c2410c">from roasting</span>
+                    @elseif ($isRaw)
+                        <span class="text-xs px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d">direct / reception</span>
+                    @else
+                        <span class="admin-badge admin-badge--primary text-xs">from sorting</span>
+                    @endif
                 </div>
                 <span class="text-sm font-bold db-revenue-today">{{ number_format($ing['quantity'], 1) }} kg</span>
             </div>
@@ -95,7 +99,18 @@
                         <strong class="ml-1" style="color:var(--admin-text)">{{ optional($batch->date)->format('d M Y') }}</strong>
                     </div>
 
-                    @if ($isRoast)
+                    @if ($isRaw)
+                        {{-- Direct reception trace --}}
+                        <div>
+                            <span>Received:</span>
+                            <strong class="ml-1" style="color:var(--admin-text)">{{ number_format((float)($batch->received ?? 0), 1) }} kg</strong>
+                        </div>
+                        <div>
+                            <span>Supplier:</span>
+                            <strong class="ml-1" style="color:var(--admin-text)">{{ $batch->client?->full_name ?? '—' }}</strong>
+                        </div>
+
+                    @elseif ($isRoast)
                         {{-- Roasting trace --}}
                         <div>
                             <span>Roasted in:</span>
@@ -161,21 +176,26 @@
             {{-- Mini pipeline arrow --}}
             @if ($batch)
             <div class="mt-2 flex items-center gap-1 text-xs" style="color:var(--admin-text-subtle)">
-                @php $rawStock = $isRoast ? ($batch->rawMaterialStock ?? $batch->sorting?->rawMaterialStock) : $batch->rawMaterialStock; @endphp
-                @if ($rawStock)
-                    <span class="px-1.5 py-0.5 rounded" style="background:var(--admin-border)">Reception {{ $rawStock->batch_number }}</span>
+                @if ($isRaw)
+                    <span class="px-1.5 py-0.5 rounded" style="background:var(--admin-border)">Reception {{ $batch->batch_number }}</span>
                     <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-                @endif
-                @if ($isRoast && $batch->sorting)
-                    <span class="admin-badge admin-badge--primary">Sorted</span>
+                    <span class="px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d">Direct → Milled {{ number_format($ing['quantity'], 1) }} kg</span>
+                @else
+                    @php $rawStock = $isRoast ? ($batch->rawMaterialStock ?? $batch->sorting?->rawMaterialStock) : $batch->rawMaterialStock; @endphp
+                    @if ($rawStock)
+                        <span class="px-1.5 py-0.5 rounded" style="background:var(--admin-border)">Reception {{ $rawStock->batch_number }}</span>
+                        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                    @endif
+                    @if ($isRoast && $batch->sorting)
+                        <span class="admin-badge admin-badge--primary">Sorted</span>
+                        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                    @endif
+                    <span class="px-1.5 py-0.5 rounded font-medium" style="{{ $isRoast ? 'background:#ffedd5;color:#c2410c' : '' }}" class="{{ !$isRoast ? 'admin-badge admin-badge--primary' : '' }}">
+                        {{ $isRoast ? 'Roasted' : 'Sorted' }}
+                    </span>
                     <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                    <span class="px-1.5 py-0.5 rounded font-medium" style="background:#f0fdf4;color:#16a34a">Milled {{ number_format($ing['quantity'], 1) }} kg</span>
                 @endif
-                <span class="px-1.5 py-0.5 rounded font-medium"
-                      style="{{ $isRoast ? 'background:#ffedd5;color:#c2410c' : '' }}" class="{{ !$isRoast ? 'admin-badge admin-badge--primary' : '' }}">
-                    {{ $isRoast ? 'Roasted' : 'Sorted' }}
-                </span>
-                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-                <span class="px-1.5 py-0.5 rounded font-medium" style="background:#f0fdf4;color:#16a34a">Milled {{ number_format($ing['quantity'], 1) }} kg</span>
             </div>
             @endif
         </div>

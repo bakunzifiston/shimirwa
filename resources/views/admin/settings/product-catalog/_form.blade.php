@@ -76,6 +76,15 @@
                     <p class="text-xs" style="color:var(--admin-text-muted)">Batches of this item appear in the Roasting form</p>
                 </div>
             </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="hidden" name="direct_to_milling" value="0">
+                <input type="checkbox" name="direct_to_milling" value="1" class="h-4 w-4 rounded"
+                       @checked(old('direct_to_milling', $sel->direct_to_milling ?? false))>
+                <div>
+                    <span class="text-sm font-medium">Direct to milling</span>
+                    <p class="text-xs" style="color:var(--admin-text-muted)">Received batches used directly in milling (no sorting/roasting)</p>
+                </div>
+            </label>
         </div>
     </div>
 

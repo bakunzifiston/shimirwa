@@ -120,8 +120,9 @@ class ProductCatalogController extends Controller
             'description'       => ['nullable', 'string'],
             'is_active'         => ['boolean'],
             'requires_sorting'  => ['boolean'],
-            'requires_roasting' => ['boolean'],
-            'sort_order'        => ['integer', 'min:0'],
+            'requires_roasting'  => ['boolean'],
+            'direct_to_milling'  => ['boolean'],
+            'sort_order'         => ['integer', 'min:0'],
         ]);
     }
 }
