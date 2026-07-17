@@ -12,12 +12,16 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('packaging_catalogs', function (Blueprint $table) {
-            // FK to the inner packaging type (e.g. Box → 1kg bag catalog entry)
-            $table->foreignId('inner_unit_catalog_id')
-                  ->nullable()->after('description')
-                  ->constrained('packaging_catalogs')->nullOnDelete();
-            // How many inner units are inside one outer package (e.g. 12 bags per box)
-            $table->unsignedSmallInteger('inner_units_per_package')->default(0)->after('inner_unit_catalog_id');
+            if (! Schema::hasColumn('packaging_catalogs', 'inner_unit_catalog_id')) {
+                $table->foreignId('inner_unit_catalog_id')
+                    ->nullable()->after('description')
+                    ->constrained('packaging_catalogs')->nullOnDelete();
+            }
+            if (! Schema::hasColumn('packaging_catalogs', 'inner_units_per_package')) {
+                $table->unsignedSmallInteger('inner_units_per_package')->default(0)->after(
+                    Schema::hasColumn('packaging_catalogs', 'inner_unit_catalog_id') ? 'inner_unit_catalog_id' : 'description'
+                );
+            }
         });
     }
 
