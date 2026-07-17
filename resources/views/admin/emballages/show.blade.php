@@ -29,6 +29,44 @@
                 <div class="admin-detail-item"><dt>Units</dt><dd>{{ $emballage->item }}</dd></div>
                 <div class="admin-detail-item"><dt>Flour (kg)</dt><dd>{{ number_format($emballage->quantity, 2) }}</dd></div>
                 <div class="admin-detail-item"><dt>Milling batch</dt><dd>{{ $emballage->milling?->batch_number ?? '—' }}</dd></div>
+                @if(!empty($emballage->milling_overflow))
+                    @php
+                        $ovMillings = \App\Models\Milling::whereIn('id', collect($emballage->milling_overflow)->pluck('milling_id'))->get()->keyBy('id');
+                    @endphp
+                    <div class="admin-detail-item span-2" style="grid-column: span 2">
+                        <dt>Also drew flour from</dt>
+                        <dd>
+                            @foreach($emballage->milling_overflow as $ov)
+                                <span class="admin-badge admin-badge--warning" style="margin-right:4px">
+                                    {{ $ovMillings[$ov['milling_id'] ?? 0]->batch_number ?? '#'.($ov['milling_id'] ?? '?') }} — {{ number_format((float)($ov['quantity'] ?? 0), 2) }} kg
+                                </span>
+                            @endforeach
+                        </dd>
+                    </div>
+                @endif
+                <div class="admin-detail-item">
+                    <dt>Packaging material batch</dt>
+                    <dd>{{ $emballage->rawMaterialStock?->batch_number ?? '—' }}
+                        @if($emballage->raw_material_stock_id)
+                            ({{ number_format($emballage->primaryPackagingUnits()) }} units)
+                        @endif
+                    </dd>
+                </div>
+                @if(!empty($emballage->packaging_overflow))
+                    @php
+                        $ovStocks = \App\Models\RawMaterialStock::whereIn('id', collect($emballage->packaging_overflow)->pluck('stock_id'))->get()->keyBy('id');
+                    @endphp
+                    <div class="admin-detail-item span-2" style="grid-column: span 2">
+                        <dt>Also took packaging from</dt>
+                        <dd>
+                            @foreach($emballage->packaging_overflow as $ov)
+                                <span class="admin-badge admin-badge--primary" style="margin-right:4px">
+                                    {{ $ovStocks[$ov['stock_id'] ?? 0]->batch_number ?? '#'.($ov['stock_id'] ?? '?') }} — {{ number_format((float)($ov['units'] ?? 0)) }} units
+                                </span>
+                            @endforeach
+                        </dd>
+                    </div>
+                @endif
                 <div class="admin-detail-item"><dt>Employee</dt><dd>{{ $emballage->employee?->full_name }}</dd></div>
                 @if($emballage->comment)
                     <div class="admin-detail-item span-2" style="grid-column: span 2"><dt>Comment</dt><dd>{{ $emballage->comment }}</dd></div>

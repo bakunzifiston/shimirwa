@@ -18,9 +18,9 @@
     // For edit: add back what this emballage already consumed on linked batches
     $millingMeta = $millings->mapWithKeys(function ($m) use ($emballage) {
         $avail = (float) $m->output_flour;
-        // Restore primary batch
+        // Restore primary batch (its share = total minus overflow)
         if (isset($emballage) && $emballage->exists && $emballage->milling_id == $m->id) {
-            $avail += (float) $emballage->quantity;
+            $avail += $emballage->primaryFlourKg();
         }
         // Restore overflow batches
         foreach ($emballage->milling_overflow ?? [] as $ov) {
@@ -37,12 +37,39 @@
 
     // All milling batches sorted oldest-first for overflow allocation
     $millingsSortedOldest = $millings->sortBy('date')->values();
+
+    // Packaging stock meta for JS: {id: {item, batch, available, date}}
+    // For edit: add back what this emballage already consumed on linked batches
+    $stockMeta = $packagingStocks->mapWithKeys(function ($s) use ($emballage) {
+        $avail = (float) $s->quantity_in;
+        if ($emballage->exists) {
+            if ($emballage->raw_material_stock_id == $s->id) {
+                $avail += $emballage->primaryPackagingUnits();
+            }
+            foreach ($emballage->packaging_overflow ?? [] as $ov) {
+                if (($ov['stock_id'] ?? null) == $s->id) {
+                    $avail += (float) ($ov['units'] ?? 0);
+                }
+            }
+        }
+        return [$s->id => [
+            'item'      => $s->item,
+            'batch'     => $s->batch_number,
+            'available' => round($avail, 2),
+            'date'      => $s->date?->format('Y-m-d') ?? '',
+        ]];
+    });
+
+    // Packaging stocks sorted oldest-first for overflow allocation
+    $stocksSortedOldest = $packagingStocks->sortBy('date')->values();
 @endphp
 
 <div id="emballage-form" class="admin-form-grid"
      data-catalog-meta='@json($catalogMeta)'
      data-milling-meta='@json($millingMeta)'
-     data-millings-ordered='@json($millingsSortedOldest->pluck("id"))'>
+     data-millings-ordered='@json($millingsSortedOldest->pluck("id"))'
+     data-stock-meta='@json($stockMeta)'
+     data-stocks-ordered='@json($stocksSortedOldest->pluck("id"))'>
 
     <div>
         <label class="admin-label" for="date">Date</label>
@@ -84,12 +111,33 @@
         <select id="raw_material_stock_id" name="raw_material_stock_id" class="admin-input">
             <option value="">Select batch (optional)</option>
             @foreach ($packagingStocks as $stock)
-                <option value="{{ $stock->id }}" @selected(old('raw_material_stock_id', $emballage->raw_material_stock_id) == $stock->id)>
-                    {{ $stock->item }} — {{ $stock->batch_number }} ({{ $stock->quantity_in }} left)
+                <option value="{{ $stock->id }}"
+                        data-item="{{ $stock->item }}"
+                        @selected(old('raw_material_stock_id', $emballage->raw_material_stock_id) == $stock->id)>
+                    {{ $stock->item }} — {{ $stock->batch_number }} ({{ number_format($stockMeta[$stock->id]['available'] ?? $stock->quantity_in) }} left)
                 </option>
             @endforeach
         </select>
+        <p id="stock-hint" class="mt-1 text-xs" style="color:var(--admin-text-muted)"></p>
     </div>
+
+    {{-- Packaging material overflow: shown when units > selected batch available --}}
+    <div class="md:col-span-2" id="stock-overflow-wrap" style="display:none">
+        <div class="rounded-lg border overflow-hidden" style="border-color:#bfdbfe">
+            <div class="px-3 py-2 text-xs font-semibold" style="background:#dbeafe;color:#1e40af">
+                Units exceed this packaging batch — also taking from:
+            </div>
+            <div id="stock-overflow-rows" class="divide-y" style="border-color:#bfdbfe"></div>
+        </div>
+    </div>
+
+    <div class="md:col-span-2" id="stock-overflow-error-wrap" style="display:none">
+        <p id="stock-overflow-error-msg" class="text-xs font-medium rounded p-2"
+           style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca"></p>
+    </div>
+
+    {{-- Hidden packaging overflow inputs (populated by JS) --}}
+    <div id="stock-overflow-inputs" class="md:col-span-2" style="display:none"></div>
 
     {{-- Inner unit batch (e.g. bags inside a box) — shown only when catalog hasInnerUnits() --}}
     <div id="inner-stock-wrap" class="md:col-span-2" style="display:none">
@@ -199,6 +247,8 @@
     const catalogMeta    = JSON.parse(form.dataset.catalogMeta    || '{}');
     const millingMeta    = JSON.parse(form.dataset.millingMeta    || '{}');
     const millingsOrdered = JSON.parse(form.dataset.millingsOrdered || '[]'); // oldest-first ids
+    const stockMeta      = JSON.parse(form.dataset.stockMeta      || '{}');
+    const stocksOrdered  = JSON.parse(form.dataset.stocksOrdered  || '[]'); // oldest-first ids
 
     const catalogEl       = form.querySelector('#packaging_catalog_id');
     const millingEl       = form.querySelector('#milling_id');
@@ -217,6 +267,13 @@
     const overflowInputs  = form.querySelector('#overflow-inputs');
     const innerStockWrap  = form.querySelector('#inner-stock-wrap');
     const innerStockHint  = form.querySelector('#inner-stock-hint');
+    const stockEl         = form.querySelector('#raw_material_stock_id');
+    const stockHint       = form.querySelector('#stock-hint');
+    const stockOvWrap     = form.querySelector('#stock-overflow-wrap');
+    const stockOvRows     = form.querySelector('#stock-overflow-rows');
+    const stockOvErrWrap  = form.querySelector('#stock-overflow-error-wrap');
+    const stockOvErrMsg   = form.querySelector('#stock-overflow-error-msg');
+    const stockOvInputs   = form.querySelector('#stock-overflow-inputs');
 
     if (!catalogEl) return;
 
@@ -320,6 +377,129 @@
         }
     }
 
+    // --- Packaging material batch: filter by type + multi-batch overflow ---
+
+    // Show only batches matching the selected packaging type name (fall back to all if none match)
+    function filterStockOptions() {
+        if (!stockEl) return;
+        const cat = getCatalog();
+        const matchName = cat ? (cat.name || '').toLowerCase() : '';
+        const opts = Array.from(stockEl.options).filter(o => o.value);
+
+        let matches = 0;
+        opts.forEach(opt => {
+            const itemName = (opt.dataset.item || '').toLowerCase();
+            if (!matchName || itemName.includes(matchName) || matchName.includes(itemName)) matches++;
+        });
+
+        opts.forEach(opt => {
+            const itemName = (opt.dataset.item || '').toLowerCase();
+            const visible  = !matchName || matches === 0
+                || itemName.includes(matchName) || matchName.includes(itemName);
+            opt.hidden   = !visible;
+            opt.disabled = !visible;
+        });
+
+        if (stockEl.value && stockEl.options[stockEl.selectedIndex]?.hidden) {
+            stockEl.value = '';
+        }
+    }
+
+    // Batches holding the same item as the selected batch, oldest-first
+    function sameItemStocks(primaryId) {
+        const primaryItem = (stockMeta[primaryId]?.item || '').toLowerCase();
+        return stocksOrdered.filter(id => (stockMeta[id]?.item || '').toLowerCase() === primaryItem);
+    }
+
+    function totalStockAvail(primaryId) {
+        return sameItemStocks(primaryId).reduce((sum, id) => sum + (stockMeta[id]?.available ?? 0), 0);
+    }
+
+    // Allocate units: selected batch first, then other same-item batches oldest-first
+    function computeStockAlloc(startId, units) {
+        const pool    = sameItemStocks(startId);
+        const ordered = [startId, ...pool.filter(id => String(id) !== String(startId))];
+
+        let rem = units;
+        const alloc = [];
+        for (const id of ordered) {
+            if (rem <= 0) break;
+            const s = stockMeta[id];
+            if (!s || s.available <= 0) continue;
+            const take = Math.min(s.available, rem);
+            alloc.push({ id, batch: s.batch, date: s.date, take: Math.round(take) });
+            rem -= take;
+        }
+        return { alloc, unmet: Math.max(rem, 0) };
+    }
+
+    function renderStockOverflow() {
+        if (!stockEl) return;
+        const stockId = stockEl.value;
+        const units   = parseFloat(itemEl.value || 0);
+
+        stockOvWrap.style.display    = 'none';
+        stockOvErrWrap.style.display = 'none';
+        stockOvInputs.innerHTML      = '';
+        if (stockHint) { stockHint.textContent = ''; stockHint.style.color = ''; }
+
+        if (!stockId) return;
+
+        const s     = stockMeta[stockId];
+        const avail = s?.available ?? 0;
+        const total = totalStockAvail(stockId);
+
+        if (stockHint) {
+            stockHint.textContent = avail < total
+                ? `This batch: ${avail.toLocaleString()} units · All ${s?.item || ''} batches: ${total.toLocaleString()} units`
+                : `Available: ${avail.toLocaleString()} units`;
+            stockHint.style.color = 'var(--admin-text-muted)';
+        }
+
+        if (units <= 0) return;
+
+        if (units > total) {
+            stockOvErrWrap.style.display = '';
+            stockOvErrMsg.textContent = `Not enough packaging material. Total available across all ${s?.item || ''} batches: ${total.toLocaleString()} units (need ${units.toLocaleString()}).`;
+            return;
+        }
+
+        const { alloc, unmet } = computeStockAlloc(stockId, units);
+
+        if (unmet > 0) {
+            stockOvErrWrap.style.display = '';
+            stockOvErrMsg.textContent = `Not enough packaging material (${unmet.toLocaleString()} units short).`;
+            return;
+        }
+
+        const extra = alloc.slice(1);
+        if (extra.length > 0) {
+            stockOvWrap.style.display = '';
+            stockOvRows.innerHTML = extra.map(a =>
+                `<div class="px-3 py-2 flex items-center justify-between text-sm" style="background:#eff6ff">
+                    <div>
+                        <span class="font-mono text-xs font-semibold">${a.batch}</span>
+                        <span class="ml-2 text-xs" style="color:#64748b">${a.date}</span>
+                    </div>
+                    <span class="font-semibold" style="color:#1e40af">${a.take.toLocaleString()} units</span>
+                </div>`
+            ).join('');
+
+            extra.forEach((a, j) => {
+                stockOvInputs.innerHTML +=
+                    `<input type="hidden" name="packaging_overflow[${j}][stock_id]" value="${a.id}">` +
+                    `<input type="hidden" name="packaging_overflow[${j}][units]" value="${a.take}">`;
+            });
+        }
+
+        if (stockHint && alloc[0]) {
+            stockHint.textContent = extra.length > 0
+                ? `Taking ${alloc[0].take.toLocaleString()} units here + ${extra.length} more batch(es)`
+                : `Using ${alloc[0].take.toLocaleString()} of ${avail.toLocaleString()} units in this batch`;
+            stockHint.style.color = 'var(--admin-primary, #10498C)';
+        }
+    }
+
     function syncInnerUnits() {
         const cat   = getCatalog();
         const units = parseFloat(itemEl.value || 0);
@@ -369,6 +549,8 @@
             if (catalogHint) { catalogHint.textContent = 'Select a type to see per-unit flour consumption.'; catalogHint.style.color = ''; }
             qtyEl.readOnly = false;
             syncInnerUnits();
+            filterStockOptions();
+            renderStockOverflow();
             renderOverflow();
             return;
         }
@@ -401,6 +583,8 @@
         }
 
         syncInnerUnits();
+        filterStockOptions();
+        renderStockOverflow();
         renderOverflow();
     }
 
@@ -414,6 +598,7 @@
 
     catalogEl.addEventListener('change', sync);
     millingEl?.addEventListener('change', renderOverflow);
+    stockEl?.addEventListener('change', renderStockOverflow);
     itemEl.addEventListener('input', () => { sync(); updateTotal(); });
     qtyEl.addEventListener('input', () => { renderOverflow(); }); // manual-weight mode
     unitPriceEl?.addEventListener('input', updateTotal);

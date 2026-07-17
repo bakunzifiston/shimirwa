@@ -124,9 +124,26 @@ class EmballageController extends Controller
                 if ($innerLinkedId) $q->orWhere('id', $innerLinkedId);
             })->orderByDesc('date')->get();
 
+        // For edit: include the primary + overflow packaging batches even if depleted
+        $pkgLinkedIds = [];
+        if ($emballage->exists && $emballage->raw_material_stock_id) {
+            $pkgLinkedIds[] = $emballage->raw_material_stock_id;
+        }
+        foreach ($emballage->packaging_overflow ?? [] as $ov) {
+            if (!empty($ov['stock_id'])) $pkgLinkedIds[] = $ov['stock_id'];
+        }
+
+        $packagingStocks = RawMaterialStock::packagingStaff()
+            ->where(function ($q) use ($pkgLinkedIds) {
+                $q->where('quantity_in', '>', 0);
+                if (!empty($pkgLinkedIds)) {
+                    $q->orWhereIn('id', $pkgLinkedIds);
+                }
+            })->orderByDesc('date')->get();
+
         return [
             'emballage'        => $emballage,
-            'packagingStocks'  => RawMaterialStock::packagingStaff()->where('quantity_in', '>', 0)->orderByDesc('date')->get(),
+            'packagingStocks'  => $packagingStocks,
             'innerStocks'      => $innerStocks,
             'millings'         => $millings,
             'employees'        => Employee::orderBy('full_name')->get(),
