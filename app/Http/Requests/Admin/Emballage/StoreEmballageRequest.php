@@ -14,20 +14,6 @@ class StoreEmballageRequest extends FormRequest
         return true;
     }
 
-    protected function prepareForValidation(): void
-    {
-        // Split total quantity into primary + overflow based on submitted overflow draws
-        $overflow   = $this->input('milling_overflow', []);
-        $totalQty   = (float) $this->input('quantity', 0);
-        $ovTotal    = array_sum(array_column(array_filter($overflow), 'quantity'));
-        $primaryQty = max(round($totalQty - $ovTotal, 4), 0);
-
-        $this->merge([
-            'quantity'      => $primaryQty,          // primary batch gets its portion
-            'quantity_total' => $totalQty,            // keep full total for display/hints
-        ]);
-    }
-
     public function rules(): array
     {
         return [
@@ -35,6 +21,9 @@ class StoreEmballageRequest extends FormRequest
             'packaging_batch_id'          => ['required', 'string', 'max:255'],
             'packaging_catalog_id'        => ['required', 'exists:packaging_catalogs,id'],
             'raw_material_stock_id'       => ['nullable', 'exists:raw_material_stocks,id'],
+            'packaging_overflow'          => ['sometimes', 'array'],
+            'packaging_overflow.*.stock_id' => ['required_with:packaging_overflow', 'exists:raw_material_stocks,id'],
+            'packaging_overflow.*.units'    => ['required_with:packaging_overflow', 'numeric', 'min:1'],
             'milling_id'                  => ['required', 'exists:millings,id'],
             'milling_overflow'            => ['sometimes', 'array'],
             'milling_overflow.*.milling_id' => ['required_with:milling_overflow', 'exists:millings,id'],
@@ -54,19 +43,31 @@ class StoreEmballageRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
-            $millingId = $this->input('milling_id');
-            $primaryQty = (float) $this->input('quantity', 0);
-            $overflow   = $this->input('milling_overflow', []);
+            $millingId  = $this->input('milling_id');
+            $overflow   = array_filter($this->input('milling_overflow', []));
+            $ovKg       = (float) array_sum(array_column($overflow, 'quantity'));
+            // quantity is the TOTAL; the primary batch supplies total minus overflow
+            $primaryQty = max((float) $this->input('quantity', 0) - $ovKg, 0);
+
+            // What this record (on edit) already holds per milling batch — add back before checking
+            $emballage = $this->route('emballage');
+            $heldFlour = [];
+            if ($emballage) {
+                if ($emballage->milling_id) {
+                    $heldFlour[$emballage->milling_id] = ($heldFlour[$emballage->milling_id] ?? 0) + $emballage->primaryFlourKg();
+                }
+                foreach ($emballage->milling_overflow ?? [] as $prev) {
+                    if (!empty($prev['milling_id'])) {
+                        $heldFlour[$prev['milling_id']] = ($heldFlour[$prev['milling_id']] ?? 0) + (float) ($prev['quantity'] ?? 0);
+                    }
+                }
+            }
 
             // Validate primary batch availability
             if ($millingId && $primaryQty > 0) {
                 $milling = Milling::find($millingId);
                 if ($milling) {
-                    $available = (float) $milling->output_flour;
-                    $emballage = $this->route('emballage');
-                    if ($emballage && $emballage->milling_id == $millingId) {
-                        $available += (float) $emballage->quantity;
-                    }
+                    $available = (float) $milling->output_flour + ($heldFlour[$milling->id] ?? 0);
                     if ($primaryQty > $available) {
                         $validator->errors()->add('milling_id',
                             sprintf('Milling batch %s only has %s kg available (needs %s kg).',
@@ -104,7 +105,61 @@ class StoreEmballageRequest extends FormRequest
                 }
             }
 
-            // Validate each overflow batch
+            // Validate packaging-material batch availability (primary + overflow)
+            $stockId     = $this->input('raw_material_stock_id');
+            $pkgOverflow = array_filter($this->input('packaging_overflow', []));
+            $ovUnits     = (float) array_sum(array_column($pkgOverflow, 'units'));
+            $primaryUnits = max((float) $this->input('item', 0) - $ovUnits, 0);
+            $emballage   = $this->route('emballage');
+
+            if ($stockId && $primaryUnits > 0) {
+                $stock = RawMaterialStock::find($stockId);
+                if ($stock) {
+                    $avail = (float) $stock->quantity_in;
+                    // On edit, add back what this record already consumed from this batch
+                    if ($emballage && $emballage->raw_material_stock_id == $stockId) {
+                        $avail += $emballage->primaryPackagingUnits();
+                    }
+                    foreach ($emballage?->packaging_overflow ?? [] as $prev) {
+                        if (($prev['stock_id'] ?? null) == $stockId) {
+                            $avail += (float) ($prev['units'] ?? 0);
+                        }
+                    }
+                    if ($primaryUnits > $avail) {
+                        $validator->errors()->add('raw_material_stock_id',
+                            sprintf('Packaging batch %s only has %s units (needs %s).',
+                                $stock->batch_number, number_format($avail), number_format($primaryUnits))
+                        );
+                    }
+                }
+            }
+
+            foreach ($pkgOverflow as $j => $ov) {
+                $ovStockId = $ov['stock_id'] ?? null;
+                $ovQty     = (float) ($ov['units'] ?? 0);
+                if (!$ovStockId || $ovQty <= 0) continue;
+
+                $stock = RawMaterialStock::find($ovStockId);
+                if (!$stock) continue;
+
+                $avail = (float) $stock->quantity_in;
+                if ($emballage && $emballage->raw_material_stock_id == $ovStockId) {
+                    $avail += $emballage->primaryPackagingUnits();
+                }
+                foreach ($emballage?->packaging_overflow ?? [] as $prev) {
+                    if (($prev['stock_id'] ?? null) == $ovStockId) {
+                        $avail += (float) ($prev['units'] ?? 0);
+                    }
+                }
+                if ($ovQty > $avail) {
+                    $validator->errors()->add("packaging_overflow.{$j}.units",
+                        sprintf('Packaging batch %s only has %s units available.',
+                            $stock->batch_number, number_format($avail))
+                    );
+                }
+            }
+
+            // Validate each flour overflow batch
             foreach ($overflow as $j => $ov) {
                 $ovMillingId = $ov['milling_id'] ?? null;
                 $ovQty       = (float) ($ov['quantity'] ?? 0);
@@ -113,7 +168,7 @@ class StoreEmballageRequest extends FormRequest
                 $m = Milling::find($ovMillingId);
                 if (!$m) continue;
 
-                $avail = (float) $m->output_flour;
+                $avail = (float) $m->output_flour + ($heldFlour[$m->id] ?? 0);
                 if ($ovQty > $avail) {
                     $validator->errors()->add("milling_overflow.{$j}.quantity",
                         sprintf('Batch %s only has %s kg available.', $m->batch_number, number_format($avail, 2))
