@@ -122,6 +122,7 @@ class ProductCatalogController extends Controller
             'requires_sorting'  => ['boolean'],
             'requires_roasting'  => ['boolean'],
             'direct_to_milling'  => ['boolean'],
+            'excludes_from_milled_weight' => ['boolean'],
             'sort_order'         => ['integer', 'min:0'],
         ]);
     }

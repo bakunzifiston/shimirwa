@@ -33,6 +33,12 @@
     </div>
 </div>
 
+@if ($milling->additivesTotal() > 0)
+    <div class="rounded-md border px-3 py-2 text-xs mb-4" style="background:#f0fdf4;border-color:#bbf7d0;color:#15803d">
+        <strong>{{ number_format($milling->additivesTotal(), 1) }} kg</strong> of additives (e.g. sugar) were mixed in and deducted from their stock batches, but are not counted in Total mixed / Output flour above — they were never milled.
+    </div>
+@endif
+
 {{-- Batch info --}}
 <div class="admin-card p-5 mb-4">
     <div class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
@@ -66,9 +72,10 @@
     @else
         @foreach ($ingredients as $ing)
         @php
-            $batch   = $ing['batch'];
-            $isRoast = $ing['source'] === 'roasting';
-            $isRaw   = $ing['source'] === 'raw';
+            $batch     = $ing['batch'];
+            $isRoast   = $ing['source'] === 'roasting';
+            $isRaw     = $ing['source'] === 'raw';
+            $isAdditive = $ing['excluded_from_weight'] ?? false;
         @endphp
         <div class="px-4 py-4 border-b last:border-0" style="border-color:var(--admin-border)">
             {{-- Row header --}}
@@ -77,8 +84,10 @@
                     <span class="text-sm font-semibold">{{ $ing['item_name'] }}</span>
                     @if ($isRoast)
                         <span class="text-xs px-1.5 py-0.5 rounded font-medium" style="background:#ffedd5;color:#c2410c">from roasting</span>
+                    @elseif ($isRaw && $isAdditive)
+                        <span class="text-xs px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d" title="Deducted from stock but not counted in total mixed / output flour">additive — not counted in output</span>
                     @elseif ($isRaw)
-                        <span class="text-xs px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d">direct / reception</span>
+                        <span class="text-xs px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d">direct to milling</span>
                     @else
                         <span class="admin-badge admin-badge--primary text-xs">from sorting</span>
                     @endif
@@ -179,7 +188,11 @@
                 @if ($isRaw)
                     <span class="px-1.5 py-0.5 rounded" style="background:var(--admin-border)">Reception {{ $batch->batch_number }}</span>
                     <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-                    <span class="px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d">Direct → Milled {{ number_format($ing['quantity'], 1) }} kg</span>
+                    @if ($isAdditive)
+                        <span class="px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d">Added as additive {{ number_format($ing['quantity'], 1) }} kg (not counted in output)</span>
+                    @else
+                        <span class="px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d">Direct → Milled {{ number_format($ing['quantity'], 1) }} kg</span>
+                    @endif
                 @else
                     @php $rawStock = $isRoast ? ($batch->rawMaterialStock ?? $batch->sorting?->rawMaterialStock) : $batch->rawMaterialStock; @endphp
                     @if ($rawStock)
@@ -202,8 +215,11 @@
         @endforeach
 
         {{-- Totals footer --}}
-        <div class="px-4 py-2 flex justify-between text-xs border-t" style="border-color:var(--admin-border);background:var(--admin-bg);color:var(--admin-text-subtle)">
-            <span>Total ingredients: <strong style="color:var(--admin-text)">{{ number_format($ingredients->sum('quantity'), 1) }} kg</strong></span>
+        <div class="px-4 py-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs border-t" style="border-color:var(--admin-border);background:var(--admin-bg);color:var(--admin-text-subtle)">
+            <span>Milled: <strong style="color:var(--admin-text)">{{ number_format($milling->total_mixed_quantity, 1) }} kg</strong></span>
+            @if ($milling->additivesTotal() > 0)
+                <span>Additives: <strong style="color:var(--admin-text)">{{ number_format($milling->additivesTotal(), 1) }} kg</strong></span>
+            @endif
             <span>Output flour: <strong class="db-revenue-today">{{ number_format($milling->output_flour, 1) }} kg</strong></span>
         </div>
     @endif

@@ -18,17 +18,19 @@ class ProductCatalog extends Model
         'requires_sorting',
         'requires_roasting',
         'direct_to_milling',
+        'excludes_from_milled_weight',
         'sort_order',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active'          => 'boolean',
-            'requires_sorting'   => 'boolean',
-            'requires_roasting'  => 'boolean',
-            'direct_to_milling'  => 'boolean',
-            'sort_order'         => 'integer',
+            'is_active'                    => 'boolean',
+            'requires_sorting'             => 'boolean',
+            'requires_roasting'            => 'boolean',
+            'direct_to_milling'            => 'boolean',
+            'excludes_from_milled_weight'  => 'boolean',
+            'sort_order'                   => 'integer',
         ];
     }
 

@@ -78,11 +78,23 @@
             </label>
             <label class="flex items-center gap-2 cursor-pointer">
                 <input type="hidden" name="direct_to_milling" value="0">
-                <input type="checkbox" name="direct_to_milling" value="1" class="h-4 w-4 rounded"
+                <input type="checkbox" id="direct_to_milling" name="direct_to_milling" value="1" class="h-4 w-4 rounded"
                        @checked(old('direct_to_milling', $sel->direct_to_milling ?? false))>
                 <div>
                     <span class="text-sm font-medium">Direct to milling</span>
                     <p class="text-xs" style="color:var(--admin-text-muted)">Received batches used directly in milling (no sorting/roasting)</p>
+                </div>
+            </label>
+        </div>
+
+        <div id="excludes-weight-wrap" class="mt-3" style="display:none">
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="hidden" name="excludes_from_milled_weight" value="0">
+                <input type="checkbox" name="excludes_from_milled_weight" value="1" class="h-4 w-4 rounded"
+                       @checked(old('excludes_from_milled_weight', $sel->excludes_from_milled_weight ?? false))>
+                <div>
+                    <span class="text-sm font-medium">Additive only (does not increase milled quantity)</span>
+                    <p class="text-xs" style="color:var(--admin-text-muted)">Still deducted from its own stock batch when used in Milling, but its kg is not added to Total mixed / Output flour. Use this for things like sugar that get mixed in but were never milled.</p>
                 </div>
             </label>
         </div>
@@ -108,6 +120,8 @@
     const catEl      = form.querySelector('#category');
     const subEl      = form.querySelector('#sub_category');
     const flagsWrap  = form.querySelector('#process-flags-wrap');
+    const directEl   = form.querySelector('#direct_to_milling');
+    const excludesWrap = form.querySelector('#excludes-weight-wrap');
     const initialSub = @json(old('sub_category', $sel->sub_category ?? ''));
 
     // Sub-categories where production flags don't apply
@@ -135,8 +149,19 @@
         }
     }
 
+    function syncExcludesWeight() {
+        if (!excludesWrap || !directEl) return;
+        const show = directEl.checked;
+        excludesWrap.style.display = show ? '' : 'none';
+        if (!show) {
+            excludesWrap.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+        }
+    }
+
     catEl.addEventListener('change', syncSub);
     subEl.addEventListener('change', syncFlags);
+    directEl?.addEventListener('change', syncExcludesWeight);
     syncSub();
+    syncExcludesWeight();
 })();
 </script>

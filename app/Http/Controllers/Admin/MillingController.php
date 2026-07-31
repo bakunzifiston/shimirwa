@@ -166,7 +166,7 @@ class MillingController extends Controller
         // Only raw-material catalog items for the ingredient dropdown (exclude packaging)
         $catalogItems = ProductCatalog::active()->production()
             ->whereNotIn('sub_category', ['Packaging Material', 'packaging material', 'Packaging Staff', 'packaging staff'])
-            ->orderBy('sort_order')->orderBy('name')->get(['name', 'requires_roasting', 'requires_sorting', 'direct_to_milling']);
+            ->orderBy('sort_order')->orderBy('name')->get(['name', 'requires_roasting', 'requires_sorting', 'direct_to_milling', 'excludes_from_milled_weight']);
 
         return [
             'milling'         => $milling,

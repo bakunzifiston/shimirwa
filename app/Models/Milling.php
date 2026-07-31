@@ -35,6 +35,43 @@ class Milling extends Model
     }
 
     /**
+     * Map of catalog item name => excludes_from_milled_weight, for the given items.
+     * Only 'raw' (direct-to-milling) items ever consult this — roasting/sorting
+     * items always count toward the milled weight since they represent actual
+     * milled grain.
+     */
+    public static function excludesWeightFlags(array $items): array
+    {
+        $names = collect($items)->where('source', 'raw')->pluck('type')->filter()->unique();
+        if ($names->isEmpty()) return [];
+
+        return ProductCatalog::whereIn('name', $names)->pluck('excludes_from_milled_weight', 'name')->all();
+    }
+
+    public static function itemCountsTowardMilledWeight(array $item, array $flags): bool
+    {
+        if (($item['source'] ?? '') !== 'raw') return true;
+
+        return empty($flags[$item['type'] ?? '']);
+    }
+
+    /**
+     * Total kg of direct-to-milling additives (e.g. sugar) mixed into this batch
+     * whose catalog entry is flagged "excludes_from_milled_weight". These are
+     * deducted from stock like any other ingredient but excluded from
+     * total_mixed_quantity / output_flour — they were never milled.
+     */
+    public function additivesTotal(): float
+    {
+        $items = $this->items ?? [];
+        $flags = self::excludesWeightFlags($items);
+
+        return (float) collect($items)
+            ->reject(fn ($item) => self::itemCountsTowardMilledWeight($item, $flags))
+            ->sum(fn ($item) => (float) ($item['quantity'] ?? 0));
+    }
+
+    /**
      * Resolve each item in the JSON to its actual Roasting or Sorting model,
      * eager-loading related records so the show page can display full trace info.
      * Returns a collection of arrays: item data + resolved 'batch' model.
@@ -55,8 +92,9 @@ class Milling extends Model
             ->whereIn('id', $sortingIds)->get()->keyBy('id');
         $raws      = RawMaterialStock::with('client')
             ->whereIn('id', $rawIds)->get()->keyBy('id');
+        $flags     = self::excludesWeightFlags($items);
 
-        return collect($items)->map(function ($item) use ($roastings, $sortings, $raws) {
+        return collect($items)->map(function ($item) use ($roastings, $sortings, $raws, $flags) {
             $source  = $item['source']   ?? '';
             $stockId = (int) ($item['stock_id'] ?? 0);
             $batch   = match($source) {
@@ -92,6 +130,7 @@ class Milling extends Model
                 'item_name' => $itemName,
                 'batch_ref' => $batchRef,
                 'batch'     => $batch,
+                'excluded_from_weight' => !self::itemCountsTowardMilledWeight($item, $flags),
             ];
         });
     }
@@ -113,8 +152,10 @@ class Milling extends Model
     protected static function booted()
     {
         static::creating(function ($milling) {
+            $items = $milling->items ?? [];
+            $flags = self::excludesWeightFlags($items);
             $total = 0;
-            foreach ($milling->items ?? [] as $item) {
+            foreach ($items as $item) {
                 $qty     = floatval($item['quantity'] ?? 0);
                 $source  = $item['source']   ?? '';
                 $stockId = (int) ($item['stock_id'] ?? 0);
@@ -122,7 +163,12 @@ class Milling extends Model
                 $batch = self::resolveBatch($source, $stockId);
                 $avail = $batch->remainingUsable();
                 if ($avail < $qty) throw new \Exception("Not enough stock in batch. Available: {$avail} kg.");
-                $total += $qty;
+                // Additives flagged "excludes_from_milled_weight" (e.g. sugar) are mixed
+                // in and deducted from stock like any other ingredient, but they were
+                // never milled — they don't count toward total_mixed_quantity / output_flour.
+                if (self::itemCountsTowardMilledWeight($item, $flags)) {
+                    $total += $qty;
+                }
             }
 
             $loss = (float) ($milling->loss ?? 0);
@@ -163,7 +209,13 @@ class Milling extends Model
             }
 
             $items = self::normalizeMillingItems($milling->items);
-            $total = array_sum(array_map(fn ($item) => (float) ($item['quantity'] ?? 0), $items));
+            // Additives flagged excludes_from_milled_weight (e.g. sugar) are excluded
+            // from the milled weight — see the note in the creating() event above.
+            $flags = self::excludesWeightFlags($items);
+            $total = array_sum(array_map(
+                fn ($item) => self::itemCountsTowardMilledWeight($item, $flags) ? (float) ($item['quantity'] ?? 0) : 0,
+                $items
+            ));
             $loss = (float) ($milling->loss ?? 0);
 
             if ($loss > $total) {
