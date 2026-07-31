@@ -161,12 +161,29 @@
         return sortingMeta;
     }
 
+    // Item names can differ slightly between the catalog and how a batch was
+    // received (case, stray spaces) — normalize before comparing so a batch
+    // never silently disappears from the picker.
+    function norm(s) { return (s || '').trim().toLowerCase(); }
+
+    // Batches grouped by item, keyed case-insensitively (falls back to an exact
+    // lookup first, then scans for a normalized match)
+    function siblingsFor(source, item) {
+        const group = batchesByItem[source] || {};
+        if (group[item]) return group[item];
+        const target = norm(item);
+        for (const [key, batches] of Object.entries(group)) {
+            if (norm(key) === target) return batches;
+        }
+        return [];
+    }
+
     // Build primary <option> list for a given source type, filtered to a specific item
     function batchOptions(source, item, selectedId) {
         const meta = getMeta(source);
         let html = '<option value="">Select batch</option>';
         for (const [id, m] of Object.entries(meta)) {
-            if (item && m.item !== item) continue;
+            if (item && norm(m.item) !== norm(item)) continue;
             const sel = String(id) === String(selectedId) ? 'selected' : '';
             html += `<option value="${id}" ${sel}>${m.batch} (${m.qty.toFixed(1)} kg)</option>`;
         }
@@ -175,7 +192,7 @@
 
     // Compute overflow allocations across batches of same item+source
     function computeAlloc(source, item, startId, qty) {
-        const siblings = (batchesByItem[source] || {})[item] || [];
+        const siblings = siblingsFor(source, item);
         const startIdx = siblings.findIndex(b => String(b.id) === String(startId));
         const ordered  = startIdx >= 0
             ? [...siblings.slice(startIdx), ...siblings.slice(0, startIdx)]
@@ -193,8 +210,7 @@
     }
 
     function totalAvailForItem(source, item) {
-        const siblings = (batchesByItem[source] || {})[item] || [];
-        return siblings.reduce((s, b) => s + b.qty, 0);
+        return siblingsFor(source, item).reduce((s, b) => s + b.qty, 0);
     }
 
     function computeTotals() {
