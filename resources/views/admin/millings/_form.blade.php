@@ -70,9 +70,12 @@
         ];
     }
 
-    // Catalog items meta: {name: {source: 'roasting'|'sorting'|'raw'}}
+    // Catalog items meta: {name: {source: 'roasting'|'sorting'|'raw', excludesWeight: bool}}
     $catalogMeta = $catalogItems->mapWithKeys(fn ($c) => [
-        $c->name => ['source' => $c->requires_roasting ? 'roasting' : ($c->direct_to_milling ? 'raw' : 'sorting')]
+        $c->name => [
+            'source'         => $c->requires_roasting ? 'roasting' : ($c->direct_to_milling ? 'raw' : 'sorting'),
+            'excludesWeight' => (bool) $c->excludes_from_milled_weight,
+        ]
     ]);
 @endphp
 
@@ -110,7 +113,7 @@
             <input type="number" step="0.01" id="total_mixed_quantity" name="total_mixed_quantity"
                    class="admin-input" style="background:var(--admin-bg)" readonly
                    value="{{ old('total_mixed_quantity', $milling->total_mixed_quantity ?? 0) }}">
-            <p class="mt-1 text-xs" style="color:var(--admin-text-muted)">Auto-calculated from ingredients.</p>
+            <p class="mt-1 text-xs" id="total-hint" style="color:var(--admin-text-muted)">Milled grain only — additives (e.g. sugar) are deducted from stock but not counted here.</p>
         </div>
         <div>
             <label class="admin-label" for="loss">Loss (kg)</label>
@@ -161,12 +164,29 @@
         return sortingMeta;
     }
 
+    // Item names can differ slightly between the catalog and how a batch was
+    // received (case, stray spaces) — normalize before comparing so a batch
+    // never silently disappears from the picker.
+    function norm(s) { return (s || '').trim().toLowerCase(); }
+
+    // Batches grouped by item, keyed case-insensitively (falls back to an exact
+    // lookup first, then scans for a normalized match)
+    function siblingsFor(source, item) {
+        const group = batchesByItem[source] || {};
+        if (group[item]) return group[item];
+        const target = norm(item);
+        for (const [key, batches] of Object.entries(group)) {
+            if (norm(key) === target) return batches;
+        }
+        return [];
+    }
+
     // Build primary <option> list for a given source type, filtered to a specific item
     function batchOptions(source, item, selectedId) {
         const meta = getMeta(source);
         let html = '<option value="">Select batch</option>';
         for (const [id, m] of Object.entries(meta)) {
-            if (item && m.item !== item) continue;
+            if (item && norm(m.item) !== norm(item)) continue;
             const sel = String(id) === String(selectedId) ? 'selected' : '';
             html += `<option value="${id}" ${sel}>${m.batch} (${m.qty.toFixed(1)} kg)</option>`;
         }
@@ -175,7 +195,7 @@
 
     // Compute overflow allocations across batches of same item+source
     function computeAlloc(source, item, startId, qty) {
-        const siblings = (batchesByItem[source] || {})[item] || [];
+        const siblings = siblingsFor(source, item);
         const startIdx = siblings.findIndex(b => String(b.id) === String(startId));
         const ordered  = startIdx >= 0
             ? [...siblings.slice(startIdx), ...siblings.slice(0, startIdx)]
@@ -193,20 +213,40 @@
     }
 
     function totalAvailForItem(source, item) {
-        const siblings = (batchesByItem[source] || {})[item] || [];
-        return siblings.reduce((s, b) => s + b.qty, 0);
+        return siblingsFor(source, item).reduce((s, b) => s + b.qty, 0);
+    }
+
+    // Only 'raw' items whose catalog entry is flagged excludesWeight are additives;
+    // other direct-to-milling items count toward the total like any ingredient.
+    function isAdditive(source, type) {
+        return source === 'raw' && !!catalogMeta[type]?.excludesWeight;
     }
 
     function computeTotals() {
         let total = 0;
-        list.querySelectorAll('.ingredient-qty').forEach(el => {
-            total += parseFloat(el.value || 0);
+        let additives = 0;
+        list.querySelectorAll('.ingredient-row').forEach(row => {
+            const source = row.querySelector('.ingredient-source-hidden')?.value || '';
+            const type   = row.querySelector('.ingredient-type')?.value || '';
+            const qty    = parseFloat(row.querySelector('.ingredient-qty')?.value || 0);
+            if (isAdditive(source, type)) {
+                additives += qty;
+            } else {
+                total += qty;
+            }
         });
         totalEl.value = total.toFixed(2);
 
         const loss   = Math.max(parseFloat(lossEl.value || 0), 0);
         const output = Math.max(total - loss, 0);
         outputEl.value = output.toFixed(2);
+
+        const totalHint = form.querySelector('#total-hint');
+        if (totalHint) {
+            totalHint.textContent = additives > 0
+                ? `Milled grain only. + ${additives.toFixed(1)} kg additives (deducted from stock, not counted here).`
+                : 'Milled grain only — additives (e.g. sugar) are deducted from stock but not counted here.';
+        }
 
         const hint = form.querySelector('#output-hint');
         if (hint) {
@@ -235,7 +275,9 @@
             : source === 'sorting'
             ? '<span class="ingredient-src-badge text-xs px-1.5 py-0.5 rounded font-medium" style="background:#dbeafe;color:#1e40af">from sorting</span>'
             : source === 'raw'
-            ? '<span class="ingredient-src-badge text-xs px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d">direct to milling</span>'
+            ? (isAdditive(source, type)
+                ? '<span class="ingredient-src-badge text-xs px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d" title="Deducted from stock but not counted in total mixed / output flour">additive (not counted in output)</span>'
+                : '<span class="ingredient-src-badge text-xs px-1.5 py-0.5 rounded font-medium" style="background:#dcfce7;color:#15803d">direct to milling</span>')
             : '<span class="ingredient-src-badge"></span>';
 
         return `<div class="ingredient-row rounded-lg border p-3 space-y-2" style="border-color:var(--admin-border);background:var(--admin-bg)" data-index="${i}">
@@ -309,7 +351,13 @@
                 } else if (source === 'raw') {
                     srcBadge.style.cssText = 'background:#dcfce7;color:#15803d';
                     srcBadge.className = 'ingredient-src-badge text-xs px-1.5 py-0.5 rounded font-medium';
-                    srcBadge.textContent = 'direct to milling';
+                    if (isAdditive(source, name)) {
+                        srcBadge.textContent = 'additive (not counted in output)';
+                        srcBadge.title = 'Deducted from stock but not counted in total mixed / output flour';
+                    } else {
+                        srcBadge.textContent = 'direct to milling';
+                        srcBadge.title = '';
+                    }
                 } else {
                     srcBadge.textContent = '';
                 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin\Milling;
 
+use App\Models\Milling;
 use App\Models\ProductCatalog;
 use App\Models\RawMaterialStock;
 use App\Models\Roasting;
@@ -19,7 +20,14 @@ class StoreMillingRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $items = $this->input('items', []);
-        $total = array_sum(array_column($items, 'quantity'));
+        // Additives flagged excludes_from_milled_weight (e.g. sugar) are deducted from
+        // stock but were never milled, so they're excluded from the milled weight —
+        // see Milling::creating().
+        $flags = Milling::excludesWeightFlags($items);
+        $total = array_sum(array_map(
+            fn ($item) => Milling::itemCountsTowardMilledWeight($item, $flags) ? (float) ($item['quantity'] ?? 0) : 0,
+            $items
+        ));
         $loss  = max((float) $this->input('loss', 0), 0);
         $this->merge([
             'total_mixed_quantity' => $total,

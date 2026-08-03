@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Admin\RawMaterialStock;
 
+use App\Models\PackagingCatalog;
+use App\Models\ProductCatalog;
 use App\Models\RawMaterialStock;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -41,7 +43,30 @@ class StoreRawMaterialStockRequest extends FormRequest
 
         $this->merge([
             'quantity_in' => max($received - $rejected, 0),
+            'item'        => $this->canonicalizeItemName($this->input('item')),
         ]);
+    }
+
+    /**
+     * Trim the item name and snap it to the exact casing used in the product/packaging
+     * catalog when it matches case-insensitively (e.g. "sugar" or "Sugar " -> "SUGAR").
+     * Without this, a free-text "Other" entry that merely differs in case/whitespace
+     * from the catalog name silently breaks batch lookups elsewhere (e.g. the Milling
+     * ingredient picker matches item names with an exact, case-sensitive comparison).
+     */
+    private function canonicalizeItemName(?string $item): ?string
+    {
+        $item = is_string($item) ? trim($item) : $item;
+        if (!$item) {
+            return $item;
+        }
+
+        $catalogNames = ProductCatalog::pluck('name')
+            ->merge(PackagingCatalog::pluck('name'));
+
+        $match = $catalogNames->first(fn ($name) => strcasecmp(trim($name), $item) === 0);
+
+        return $match ?? $item;
     }
 
     public function withValidator($validator): void
