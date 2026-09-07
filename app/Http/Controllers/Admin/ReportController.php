@@ -5,7 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Emballage;
 use App\Models\Milling;
+use App\Models\Order;
+use App\Models\RawMaterialStock;
+use App\Models\Roasting;
 use App\Models\Sale;
+use App\Models\Sorting;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
@@ -14,9 +19,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
-    public function index(Request $request): View|StreamedResponse
+    public function index(Request $request): View|StreamedResponse|Response
     {
         $tab = $request->input('tab', 'packaging');
+
+        if ($tab === 'monthly') {
+            return $this->monthlyIndex($request);
+        }
 
         // Date range filter — default: current month
         $from = $request->input('from')
@@ -51,6 +60,460 @@ class ReportController extends Controller
             'salesRows', 'salesSummary',
             'stockRows'
         ));
+    }
+
+    // -------------------------------------------------------------------------
+    // Monthly report — consolidated view of production and business data for
+    // a single calendar month, exportable as CSV or PDF.
+    // -------------------------------------------------------------------------
+    private function monthlyIndex(Request $request): View|StreamedResponse|Response
+    {
+        $month = $request->input('month')
+            ? Carbon::parse($request->input('month').'-01')
+            : now()->startOfMonth();
+
+        $from = $month->copy()->startOfMonth()->startOfDay();
+        $to   = $month->copy()->endOfMonth()->endOfDay();
+
+        $monthly = $this->monthlyReport($from, $to);
+
+        if ($request->input('format') === 'pdf') {
+            return $this->exportMonthlyPdf($from, $to, $monthly);
+        }
+
+        if ($request->boolean('export')) {
+            return $this->exportMonthlyCsv($from, $to, $monthly);
+        }
+
+        $tab = 'monthly';
+        $packagingRows  = collect();
+        $salesRows      = collect();
+        $stockRows      = collect();
+        $packagingSummary = collect();
+        $salesSummary   = [];
+
+        return view('admin.reports.index', compact(
+            'tab', 'from', 'to', 'month', 'monthly',
+            'packagingRows', 'packagingSummary',
+            'salesRows', 'salesSummary',
+            'stockRows'
+        ));
+    }
+
+    /**
+     * Build the consolidated monthly data set: raw materials received,
+     * production pipeline (sorting/roasting/milling), packaging, sales,
+     * online shop orders, and current stock levels.
+     */
+    private function monthlyReport(Carbon $from, Carbon $to): array
+    {
+        $dateRange = [$from->toDateString(), $to->toDateString()];
+
+        // ---- Raw materials received ----
+        $rawMaterials = RawMaterialStock::whereBetween('date', $dateRange)
+            ->selectRaw('item, type, SUM(received) as received, SUM(rejected) as rejected, COUNT(*) as batches')
+            ->groupBy('item', 'type')
+            ->orderBy('item')
+            ->get();
+
+        $rawMaterialsTotals = [
+            'received' => (float) $rawMaterials->sum('received'),
+            'rejected' => (float) $rawMaterials->sum('rejected'),
+            'batches'  => (int) $rawMaterials->sum('batches'),
+        ];
+
+        // ---- Production pipeline: sorting, roasting, milling ----
+        $sorting = Sorting::whereBetween('date', $dateRange)
+            ->selectRaw('SUM(quantity_in) as input, SUM(loss) as loss, COUNT(*) as batches')
+            ->first();
+
+        $roasting = Roasting::whereBetween('date', $dateRange)
+            ->selectRaw('SUM(quantity_in) as input, SUM(loss) as loss, COUNT(*) as batches')
+            ->first();
+
+        $milling = Milling::whereBetween('date', $dateRange)
+            ->selectRaw('SUM(total_mixed_quantity) as mixed, SUM(loss) as loss, COUNT(*) as batches')
+            ->first();
+
+        $production = [
+            'sorting'  => [
+                'input'   => (float) ($sorting->input ?? 0),
+                'loss'    => (float) ($sorting->loss ?? 0),
+                'output'  => max((float) ($sorting->input ?? 0) - (float) ($sorting->loss ?? 0), 0),
+                'batches' => (int) ($sorting->batches ?? 0),
+            ],
+            'roasting' => [
+                'input'   => (float) ($roasting->input ?? 0),
+                'loss'    => (float) ($roasting->loss ?? 0),
+                'output'  => max((float) ($roasting->input ?? 0) - (float) ($roasting->loss ?? 0), 0),
+                'batches' => (int) ($roasting->batches ?? 0),
+            ],
+            'milling'  => [
+                'input'   => (float) ($milling->mixed ?? 0),
+                'loss'    => (float) ($milling->loss ?? 0),
+                'output'  => max((float) ($milling->mixed ?? 0) - (float) ($milling->loss ?? 0), 0),
+                'batches' => (int) ($milling->batches ?? 0),
+            ],
+        ];
+
+        // ---- Packaging, by product ----
+        $packagingByProduct = Emballage::with('packagingCatalog')
+            ->whereBetween('date', $dateRange)
+            ->get()
+            ->groupBy(fn ($e) => $e->packagingCatalog?->name ?? strtoupper($e->packaging_type ?? 'Unknown'))
+            ->map(fn ($rows, $name) => [
+                'name'    => $name,
+                'units'   => (float) $rows->sum('item'),
+                'kg'      => (float) $rows->sum('quantity'),
+                'damaged' => (int) $rows->sum('damaged'),
+                'batches' => $rows->count(),
+            ])
+            ->sortByDesc('kg')
+            ->values();
+
+        $packagingTotals = [
+            'units'   => (float) $packagingByProduct->sum('units'),
+            'kg'      => (float) $packagingByProduct->sum('kg'),
+            'damaged' => (int) $packagingByProduct->sum('damaged'),
+        ];
+
+        // ---- Sales, by product ----
+        $salesByProduct = Sale::whereBetween('date', $dateRange)
+            ->selectRaw('item, SUM(quantity) as units, SUM(total_price) as revenue, SUM(returned) as returned, COUNT(*) as txns')
+            ->groupBy('item')
+            ->orderByDesc('revenue')
+            ->get();
+
+        $salesTotals = [
+            'units'    => (float) $salesByProduct->sum('units'),
+            'revenue'  => (float) $salesByProduct->sum('revenue'),
+            'returned' => (float) $salesByProduct->sum('returned'),
+        ];
+
+        // ---- Top clients by revenue ----
+        $topClients = Sale::whereBetween('date', $dateRange)
+            ->whereNotNull('client_id')
+            ->with('client')
+            ->get()
+            ->groupBy('client_id')
+            ->map(fn ($rows) => [
+                'name'    => $rows->first()->client?->full_name ?? '—',
+                'units'   => (float) $rows->sum('quantity'),
+                'revenue' => (float) $rows->sum('total_price'),
+            ])
+            ->sortByDesc('revenue')
+            ->take(5)
+            ->values();
+
+        // ---- Online shop orders ----
+        $shopOrdersByStatus = Order::whereBetween('created_at', [$from, $to])
+            ->selectRaw('order_status, COUNT(*) as count, SUM(total) as revenue')
+            ->groupBy('order_status')
+            ->get();
+
+        $shopOrderTotals = [
+            'orders'  => (int) $shopOrdersByStatus->sum('count'),
+            'revenue' => (float) Order::whereBetween('created_at', [$from, $to])
+                ->where('payment_status', Order::PAYMENT_PAID)
+                ->sum('total'),
+        ];
+
+        // ---- Stock levels as of the end of the selected month (not "live now") ----
+        $rawStockAsOf      = $this->rawMaterialBalanceAsOf($to);
+        $flourStockAsOf    = $this->flourBalanceAsOf($to);
+        $packagedStockAsOf = $this->packagedStockBalanceAsOf($to);
+
+        return compact(
+            'rawMaterials', 'rawMaterialsTotals',
+            'production',
+            'packagingByProduct', 'packagingTotals',
+            'salesByProduct', 'salesTotals', 'topClients',
+            'shopOrdersByStatus', 'shopOrderTotals',
+            'rawStockAsOf', 'flourStockAsOf', 'packagedStockAsOf'
+        );
+    }
+
+    /**
+     * Raw material balance per item as of a given date: net received minus
+     * everything drawn from it (sorting, roasting, milling, and packaging-
+     * material draws — primary, overflow, and inner units), each filtered
+     * by the consuming record's own date. Mirrors the deduction logic in
+     * the Sorting/Roasting/Milling/Emballage model events, but scoped to
+     * "as of" a point in time instead of "right now".
+     */
+    private function rawMaterialBalanceAsOf(Carbon $asOf): \Illuminate\Support\Collection
+    {
+        $asOfDate = $asOf->toDateString();
+
+        $received = RawMaterialStock::where('date', '<=', $asOfDate)
+            ->selectRaw('item, SUM(received) - SUM(rejected) as net')
+            ->groupBy('item')
+            ->pluck('net', 'item');
+
+        $sortingConsumed = Sorting::join('raw_material_stocks', 'sortings.raw_material_stock_id', '=', 'raw_material_stocks.id')
+            ->where('sortings.date', '<=', $asOfDate)
+            ->selectRaw('raw_material_stocks.item as item, SUM(sortings.quantity_in) as qty')
+            ->groupBy('raw_material_stocks.item')
+            ->pluck('qty', 'item');
+
+        // Only roastings sourced directly from raw material draw from raw_material_stocks —
+        // roastings sourced from a sorting batch draw from that sorting's remaining stock instead.
+        $roastingConsumed = Roasting::join('raw_material_stocks', 'roastings.raw_material_stock_id', '=', 'raw_material_stocks.id')
+            ->where('roastings.date', '<=', $asOfDate)
+            ->selectRaw('raw_material_stocks.item as item, SUM(roastings.quantity_in) as qty')
+            ->groupBy('raw_material_stocks.item')
+            ->pluck('qty', 'item');
+
+        $rawStockItemMap = RawMaterialStock::pluck('item', 'id');
+
+        $millingConsumed = [];
+        Milling::where('date', '<=', $asOfDate)->select('items')->get()->each(function ($milling) use (&$millingConsumed, $rawStockItemMap) {
+            foreach ($milling->items ?? [] as $it) {
+                if (($it['source'] ?? '') !== 'raw') {
+                    continue;
+                }
+                $item = $rawStockItemMap[(int) ($it['stock_id'] ?? 0)] ?? null;
+                if ($item) {
+                    $millingConsumed[$item] = ($millingConsumed[$item] ?? 0) + (float) ($it['quantity'] ?? 0);
+                }
+            }
+        });
+
+        $packagingMaterialConsumed = [];
+        Emballage::with('packagingCatalog')
+            ->where('date', '<=', $asOfDate)
+            ->get()
+            ->each(function (Emballage $e) use (&$packagingMaterialConsumed, $rawStockItemMap) {
+                $primaryUnits = $e->primaryPackagingUnits();
+                if ($e->raw_material_stock_id && $primaryUnits > 0) {
+                    $item = $rawStockItemMap[$e->raw_material_stock_id] ?? null;
+                    if ($item) {
+                        $packagingMaterialConsumed[$item] = ($packagingMaterialConsumed[$item] ?? 0) + $primaryUnits;
+                    }
+                }
+
+                foreach ($e->packaging_overflow ?? [] as $ov) {
+                    $stockId = $ov['stock_id'] ?? null;
+                    $units   = (float) ($ov['units'] ?? 0);
+                    if ($stockId && $units > 0) {
+                        $item = $rawStockItemMap[$stockId] ?? null;
+                        if ($item) {
+                            $packagingMaterialConsumed[$item] = ($packagingMaterialConsumed[$item] ?? 0) + $units;
+                        }
+                    }
+                }
+
+                $innerUnits = $e->innerUnitsTotal();
+                if ($innerUnits > 0 && $e->inner_stock_id) {
+                    $item = $rawStockItemMap[$e->inner_stock_id] ?? null;
+                    if ($item) {
+                        $packagingMaterialConsumed[$item] = ($packagingMaterialConsumed[$item] ?? 0) + $innerUnits;
+                    }
+                }
+            });
+
+        $items = collect($received->keys())
+            ->merge($sortingConsumed->keys())
+            ->merge($roastingConsumed->keys())
+            ->merge(array_keys($millingConsumed))
+            ->merge(array_keys($packagingMaterialConsumed))
+            ->unique()
+            ->sort()
+            ->values();
+
+        return $items
+            ->map(function ($item) use ($received, $sortingConsumed, $roastingConsumed, $millingConsumed, $packagingMaterialConsumed) {
+                $balance = (float) ($received[$item] ?? 0)
+                    - (float) ($sortingConsumed[$item] ?? 0)
+                    - (float) ($roastingConsumed[$item] ?? 0)
+                    - (float) ($millingConsumed[$item] ?? 0)
+                    - (float) ($packagingMaterialConsumed[$item] ?? 0);
+
+                return (object) ['item' => $item, 'remaining' => $balance];
+            })
+            ->filter(fn ($row) => $row->remaining > 0.01)
+            ->sortBy('item')
+            ->values();
+    }
+
+    /**
+     * Unpackaged milled flour as of a given date: flour produced (mixed minus
+     * loss) by millings up to that date, minus flour drawn by packaging
+     * records up to that date. Mirrors Milling::output_flour's live deduction
+     * in Emballage's model events, scoped to "as of" a point in time.
+     */
+    private function flourBalanceAsOf(Carbon $asOf): float
+    {
+        $asOfDate = $asOf->toDateString();
+
+        $produced = (float) Milling::where('date', '<=', $asOfDate)
+            ->selectRaw('COALESCE(SUM(total_mixed_quantity), 0) - COALESCE(SUM(loss), 0) as produced')
+            ->value('produced');
+
+        $packaged = (float) Emballage::where('date', '<=', $asOfDate)->sum('quantity');
+
+        return max($produced - $packaged, 0);
+    }
+
+    /**
+     * Packaged product balance per product as of a given date: units
+     * packaged up to that date minus units sold net of returns up to that
+     * date. Mirrors stockReport()'s opening-balance calculation, scoped to
+     * an arbitrary "as of" date instead of a report window's start.
+     */
+    private function packagedStockBalanceAsOf(Carbon $asOf): \Illuminate\Support\Collection
+    {
+        $asOfDate = $asOf->toDateString();
+
+        $packagedIn = Emballage::with('packagingCatalog')
+            ->where('date', '<=', $asOfDate)
+            ->get()
+            ->groupBy(fn ($e) => $e->packagingCatalog?->name ?? strtoupper($e->packaging_type ?? 'Unknown'))
+            ->map(fn ($rows) => (float) $rows->sum('item'));
+
+        $soldOut = Sale::where('date', '<=', $asOfDate)
+            ->selectRaw('item, SUM(quantity) - SUM(returned) as net_sold')
+            ->groupBy('item')
+            ->pluck('net_sold', 'item');
+
+        $names = collect($packagedIn->keys())->merge($soldOut->keys())->unique()->sort()->values();
+
+        return $names
+            ->map(fn ($name) => [
+                'name'  => $name,
+                'units' => (float) ($packagedIn[$name] ?? 0) - (float) ($soldOut[$name] ?? 0),
+            ])
+            ->filter(fn ($row) => $row['units'] > 0.01)
+            ->sortByDesc('units')
+            ->values();
+    }
+
+    private function exportMonthlyCsv(Carbon $from, Carbon $to, array $m): StreamedResponse
+    {
+        $filename = "shimirwa-monthly-report-{$from->format('Y-m')}.csv";
+
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Pragma'              => 'no-cache',
+            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires'             => '0',
+        ];
+
+        return response()->stream(function () use ($from, $to, $m) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+
+            fputcsv($out, ['Shimirwa Ltd — Monthly Report', $from->format('F Y')]);
+            fputcsv($out, []);
+
+            fputcsv($out, ['RAW MATERIALS RECEIVED']);
+            fputcsv($out, ['Item', 'Type', 'Received (kg)', 'Rejected (kg)', 'Batches']);
+            foreach ($m['rawMaterials'] as $row) {
+                fputcsv($out, [$row->item, $row->type, number_format($row->received, 3), number_format($row->rejected, 3), $row->batches]);
+            }
+            fputcsv($out, ['Total', '', number_format($m['rawMaterialsTotals']['received'], 3), number_format($m['rawMaterialsTotals']['rejected'], 3), $m['rawMaterialsTotals']['batches']]);
+            fputcsv($out, []);
+
+            fputcsv($out, ['PRODUCTION']);
+            fputcsv($out, ['Stage', 'Input (kg)', 'Loss (kg)', 'Output (kg)', 'Batches']);
+            foreach (['sorting' => 'Sorting', 'roasting' => 'Roasting', 'milling' => 'Milling (flour)'] as $key => $label) {
+                $p = $m['production'][$key];
+                fputcsv($out, [$label, number_format($p['input'], 3), number_format($p['loss'], 3), number_format($p['output'], 3), $p['batches']]);
+            }
+            fputcsv($out, []);
+
+            fputcsv($out, ['PACKAGING']);
+            fputcsv($out, ['Product', 'Units Packed', 'Kg Packed', 'Damaged', 'Batches']);
+            foreach ($m['packagingByProduct'] as $row) {
+                fputcsv($out, [$row['name'], number_format($row['units']), number_format($row['kg'], 3), $row['damaged'], $row['batches']]);
+            }
+            fputcsv($out, ['Total', number_format($m['packagingTotals']['units']), number_format($m['packagingTotals']['kg'], 3), $m['packagingTotals']['damaged'], '']);
+            fputcsv($out, []);
+
+            fputcsv($out, ['SALES']);
+            fputcsv($out, ['Product', 'Units Sold', 'Revenue (RWF)', 'Returned', 'Transactions']);
+            foreach ($m['salesByProduct'] as $row) {
+                fputcsv($out, [$row->item, number_format($row->units), number_format($row->revenue, 2), number_format($row->returned), $row->txns]);
+            }
+            fputcsv($out, ['Total', number_format($m['salesTotals']['units']), number_format($m['salesTotals']['revenue'], 2), number_format($m['salesTotals']['returned']), '']);
+            fputcsv($out, []);
+
+            fputcsv($out, ['TOP CLIENTS']);
+            fputcsv($out, ['Client', 'Units', 'Revenue (RWF)']);
+            foreach ($m['topClients'] as $row) {
+                fputcsv($out, [$row['name'], number_format($row['units']), number_format($row['revenue'], 2)]);
+            }
+            fputcsv($out, []);
+
+            fputcsv($out, ['ONLINE SHOP ORDERS']);
+            fputcsv($out, ['Status', 'Orders', 'Revenue (RWF)']);
+            foreach ($m['shopOrdersByStatus'] as $row) {
+                fputcsv($out, [ucfirst($row->order_status), $row->count, number_format($row->revenue ?? 0, 2)]);
+            }
+            fputcsv($out, ['Total orders', $m['shopOrderTotals']['orders'], number_format($m['shopOrderTotals']['revenue'], 2).' (paid)']);
+            fputcsv($out, []);
+
+            fputcsv($out, ['STOCK LEVELS AS OF '.strtoupper($to->format('d M Y'))]);
+            fputcsv($out, ['Raw materials']);
+            fputcsv($out, ['Item', 'Remaining (kg)']);
+            foreach ($m['rawStockAsOf'] as $row) {
+                fputcsv($out, [$row->item, number_format($row->remaining, 3)]);
+            }
+            fputcsv($out, []);
+            fputcsv($out, ['Unpackaged milled flour (kg)', number_format($m['flourStockAsOf'], 3)]);
+            fputcsv($out, []);
+            fputcsv($out, ['Packaged products']);
+            fputcsv($out, ['Product', 'Units in stock']);
+            foreach ($m['packagedStockAsOf'] as $row) {
+                fputcsv($out, [$row['name'], number_format($row['units'])]);
+            }
+
+            fclose($out);
+        }, 200, $headers);
+    }
+
+    private function exportMonthlyPdf(Carbon $from, Carbon $to, array $monthly): Response
+    {
+        $pdf = Pdf::loadView('admin.reports.monthly-pdf', [
+            'from'        => $from,
+            'to'          => $to,
+            'monthly'     => $monthly,
+            'logoDataUri' => $this->logoDataUri(),
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->download("shimirwa-monthly-report-{$from->format('Y-m')}.pdf");
+    }
+
+    /**
+     * Embed the configured admin logo as a base64 data URI so dompdf can
+     * render it reliably regardless of local file/chroot resolution.
+     */
+    private function logoDataUri(): ?string
+    {
+        $logo = config('admin.logo');
+        if (! $logo || str_starts_with($logo, 'http')) {
+            return null;
+        }
+
+        $path = public_path($logo);
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $mime = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+            'png'         => 'image/png',
+            'jpg', 'jpeg' => 'image/jpeg',
+            'gif'         => 'image/gif',
+            'svg'         => 'image/svg+xml',
+            'webp'        => 'image/webp',
+            default       => null,
+        };
+        if (! $mime) {
+            return null;
+        }
+
+        return 'data:'.$mime.';base64,'.base64_encode(file_get_contents($path));
     }
 
     private function exportCsv(
