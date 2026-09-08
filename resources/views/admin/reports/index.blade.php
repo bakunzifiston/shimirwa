@@ -148,27 +148,44 @@
         </div>
     @endif
 
-    {{-- Production pipeline --}}
+    {{-- Production pipeline, by raw material item --}}
     <h3 class="font-semibold text-sm mb-2" style="color:var(--admin-text)">Production pipeline</h3>
-    <div class="admin-card overflow-hidden mb-6">
+    @foreach (['sorting' => 'Sorting', 'roasting' => 'Roasting', 'milling' => 'Milling (flour)'] as $key => $label)
+    @php($rows = $monthly['productionByItem'][$key]['rows'])
+    @php($t = $monthly['productionByItem'][$key]['totals'])
+    <div class="admin-card overflow-hidden mb-4">
         <table class="admin-table w-full">
             <thead>
-                <tr><th>Stage</th><th class="text-right">Input (kg)</th><th class="text-right">Loss (kg)</th><th class="text-right">Output (kg)</th><th class="text-right">Batches</th></tr>
+                <tr>
+                    <th colspan="5" class="text-left" style="color:var(--admin-text)">{{ $label }}</th>
+                </tr>
+                <tr><th>Item</th><th class="text-right">Input (kg)</th><th class="text-right">Loss (kg)</th><th class="text-right">Output (kg)</th><th class="text-right">Batches</th></tr>
             </thead>
             <tbody>
-                @foreach (['sorting' => 'Sorting', 'roasting' => 'Roasting', 'milling' => 'Milling (flour)'] as $key => $label)
-                @php($p = $monthly['production'][$key])
+                @forelse ($rows as $row)
                 <tr>
-                    <td class="font-medium">{{ $label }}</td>
-                    <td class="text-right">{{ number_format($p['input'], 1) }}</td>
-                    <td class="text-right text-red-500">{{ $p['loss'] > 0 ? number_format($p['loss'], 1) : '—' }}</td>
-                    <td class="text-right font-semibold db-revenue-today">{{ number_format($p['output'], 1) }}</td>
-                    <td class="text-right">{{ $p['batches'] }}</td>
+                    <td class="font-medium">{{ $row['item'] }}</td>
+                    <td class="text-right">{{ number_format($row['input'], 1) }}</td>
+                    <td class="text-right text-red-500">{{ $row['loss'] > 0 ? number_format($row['loss'], 1) : '—' }}</td>
+                    <td class="text-right font-semibold db-revenue-today">{{ number_format($row['output'], 1) }}</td>
+                    <td class="text-right">{{ $row['batches'] }}</td>
                 </tr>
-                @endforeach
+                @empty
+                <tr><td colspan="5" class="text-center text-sm py-4" style="color:var(--admin-text-subtle)">No {{ strtolower($label) }} recorded this month.</td></tr>
+                @endforelse
+                @if ($rows->count() > 1)
+                <tr style="border-top:2px solid var(--admin-border)">
+                    <td class="font-bold">Total</td>
+                    <td class="text-right font-bold">{{ number_format($t['input'], 1) }}</td>
+                    <td class="text-right font-bold text-red-500">{{ $t['loss'] > 0 ? number_format($t['loss'], 1) : '—' }}</td>
+                    <td class="text-right font-bold">{{ number_format($t['output'], 1) }}</td>
+                    <td class="text-right font-bold">{{ $t['batches'] }}</td>
+                </tr>
+                @endif
             </tbody>
         </table>
     </div>
+    @endforeach
 
     {{-- Packaging by product --}}
     <h3 class="font-semibold text-sm mb-2" style="color:var(--admin-text)">Packaging by product</h3>

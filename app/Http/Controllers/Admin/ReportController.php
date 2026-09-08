@@ -156,6 +156,9 @@ class ReportController extends Controller
             ],
         ];
 
+        // ---- Production pipeline, broken down by raw material item ----
+        $productionByItem = $this->productionByItem($dateRange);
+
         // ---- Packaging, by product ----
         $packagingByProduct = Emballage::with('packagingCatalog')
             ->whereBetween('date', $dateRange)
@@ -225,12 +228,117 @@ class ReportController extends Controller
 
         return compact(
             'rawMaterials', 'rawMaterialsTotals',
-            'production',
+            'production', 'productionByItem',
             'packagingByProduct', 'packagingTotals',
             'salesByProduct', 'salesTotals', 'topClients',
             'shopOrdersByStatus', 'shopOrderTotals',
             'rawStockAsOf', 'flourStockAsOf', 'packagedStockAsOf'
         );
+    }
+
+    /**
+     * Production pipeline broken down per raw material item (e.g. Maize,
+     * Sorghum) instead of a single stage-wide total. Sorting and roasting
+     * batches each draw from exactly one raw material stock (directly, or
+     * for roasting via a sorting batch), so their per-item figures are
+     * exact. A milling batch can mix several items together under one
+     * batch-level loss figure, so each item's loss/output share is
+     * allocated proportionally to its share of the batch's milled weight.
+     *
+     * Milling item rows also include additives (e.g. sugar) that are mixed
+     * in but flagged "excludes_from_milled_weight" — unlike
+     * production['milling'], which reports actual flour weight only, this
+     * breakdown's totals are the literal sum of the rows shown, so the
+     * table is internally consistent on its own.
+     */
+    private function productionByItem(array $dateRange): array
+    {
+        $sortingByItem = Sorting::join('raw_material_stocks', 'sortings.raw_material_stock_id', '=', 'raw_material_stocks.id')
+            ->whereBetween('sortings.date', $dateRange)
+            ->selectRaw('raw_material_stocks.item as item, SUM(sortings.quantity_in) as input, SUM(sortings.loss) as loss, COUNT(*) as batches')
+            ->groupBy('raw_material_stocks.item')
+            ->get()
+            ->map(fn ($row) => $this->pipelineRow($row->item, (float) $row->input, (float) $row->loss, (int) $row->batches))
+            ->sortBy('item')
+            ->values();
+
+        $roastingDirect = Roasting::join('raw_material_stocks', 'roastings.raw_material_stock_id', '=', 'raw_material_stocks.id')
+            ->whereBetween('roastings.date', $dateRange)
+            ->selectRaw('raw_material_stocks.item as item, SUM(roastings.quantity_in) as input, SUM(roastings.loss) as loss, COUNT(*) as batches')
+            ->groupBy('raw_material_stocks.item')
+            ->get();
+
+        $roastingViaSorting = Roasting::join('sortings', 'roastings.sorting_id', '=', 'sortings.id')
+            ->join('raw_material_stocks', 'sortings.raw_material_stock_id', '=', 'raw_material_stocks.id')
+            ->whereBetween('roastings.date', $dateRange)
+            ->selectRaw('raw_material_stocks.item as item, SUM(roastings.quantity_in) as input, SUM(roastings.loss) as loss, COUNT(*) as batches')
+            ->groupBy('raw_material_stocks.item')
+            ->get();
+
+        $roastingByItem = $roastingDirect->concat($roastingViaSorting)
+            ->groupBy('item')
+            ->map(fn ($rows, $item) => $this->pipelineRow($item, (float) $rows->sum('input'), (float) $rows->sum('loss'), (int) $rows->sum('batches')))
+            ->sortBy('item')
+            ->values();
+
+        $millingBatchCount = Milling::whereBetween('date', $dateRange)->count();
+        $millingTotals = [];
+        Milling::whereBetween('date', $dateRange)->get()->each(function (Milling $milling) use (&$millingTotals) {
+            $ingredients = $milling->resolvedIngredients();
+            $batchMixed  = (float) $ingredients->reject(fn ($i) => $i['excluded_from_weight'])->sum('quantity');
+            $batchLoss   = (float) $milling->loss;
+
+            foreach ($ingredients as $ing) {
+                $item = $ing['item_name'];
+                $qty  = (float) $ing['quantity'];
+                $itemLoss = (! $ing['excluded_from_weight'] && $batchMixed > 0)
+                    ? $batchLoss * ($qty / $batchMixed)
+                    : 0.0;
+
+                $millingTotals[$item] ??= ['input' => 0.0, 'loss' => 0.0, 'batches' => []];
+                $millingTotals[$item]['input']  += $qty;
+                $millingTotals[$item]['loss']   += $itemLoss;
+                $millingTotals[$item]['batches'][$milling->id] = true;
+            }
+        });
+
+        $millingByItem = collect($millingTotals)
+            ->map(fn ($t, $item) => $this->pipelineRow($item, $t['input'], $t['loss'], count($t['batches'])))
+            ->sortBy('item')
+            ->values();
+
+        return [
+            'sorting'  => ['rows' => $sortingByItem, 'totals' => $this->pipelineTotals($sortingByItem, $sortingByItem->sum('batches'))],
+            'roasting' => ['rows' => $roastingByItem, 'totals' => $this->pipelineTotals($roastingByItem, $roastingByItem->sum('batches'))],
+            'milling'  => ['rows' => $millingByItem, 'totals' => $this->pipelineTotals($millingByItem, $millingBatchCount)],
+        ];
+    }
+
+    private function pipelineRow(string $item, float $input, float $loss, int $batches): array
+    {
+        return [
+            'item'    => $item,
+            'input'   => $input,
+            'loss'    => $loss,
+            'output'  => max($input - $loss, 0),
+            'batches' => $batches,
+        ];
+    }
+
+    /**
+     * Totals for a stage's item rows: input/loss/output are the literal sum
+     * of what's shown (so the table always reconciles with its own Total
+     * row), while batches is passed in separately since summing per-item
+     * batch counts double-counts a milling batch that mixed several items.
+     */
+    private function pipelineTotals(\Illuminate\Support\Collection $rows, int $batches): array
+    {
+        return [
+            'input'   => (float) $rows->sum('input'),
+            'loss'    => (float) $rows->sum('loss'),
+            'output'  => (float) $rows->sum('output'),
+            'batches' => $batches,
+        ];
     }
 
     /**
@@ -416,10 +524,13 @@ class ReportController extends Controller
             fputcsv($out, []);
 
             fputcsv($out, ['PRODUCTION']);
-            fputcsv($out, ['Stage', 'Input (kg)', 'Loss (kg)', 'Output (kg)', 'Batches']);
+            fputcsv($out, ['Stage', 'Item', 'Input (kg)', 'Loss (kg)', 'Output (kg)', 'Batches']);
             foreach (['sorting' => 'Sorting', 'roasting' => 'Roasting', 'milling' => 'Milling (flour)'] as $key => $label) {
-                $p = $m['production'][$key];
-                fputcsv($out, [$label, number_format($p['input'], 3), number_format($p['loss'], 3), number_format($p['output'], 3), $p['batches']]);
+                foreach ($m['productionByItem'][$key]['rows'] as $row) {
+                    fputcsv($out, [$label, $row['item'], number_format($row['input'], 3), number_format($row['loss'], 3), number_format($row['output'], 3), $row['batches']]);
+                }
+                $t = $m['productionByItem'][$key]['totals'];
+                fputcsv($out, [$label, 'Total', number_format($t['input'], 3), number_format($t['loss'], 3), number_format($t['output'], 3), $t['batches']]);
             }
             fputcsv($out, []);
 
