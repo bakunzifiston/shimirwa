@@ -35,7 +35,7 @@
         .comments-box { border: 1px solid #ccc; border-radius: 3px; padding: 4px 12px 12px; margin-top: 4px; }
         .comment-line { border-bottom: 1px solid #ccc; height: 26px; }
         .comment-line:last-child { border-bottom: none; }
-        .signoff { width: 100%; margin-top: 28px; }
+        .signoff { width: 100%; margin-top: 28px; border-collapse: separate; border-spacing: 0 18px; }
         .signoff td { border: none; padding: 0; font-size: 10px; color: #444; }
         .signoff .field { display: inline-block; min-width: 170px; border-bottom: 1px solid #333; margin-left: 6px; }
     </style>
@@ -283,6 +283,11 @@
         </div>
 
         <table class="signoff">
+            <tr>
+                <td>Prepared by:<span class="field">&nbsp;</span></td>
+                <td>Signature:<span class="field">&nbsp;</span></td>
+                <td>Date:<span class="field">&nbsp;</span></td>
+            </tr>
             <tr>
                 <td>Reviewed by:<span class="field">&nbsp;</span></td>
                 <td>Signature:<span class="field">&nbsp;</span></td>
