@@ -96,23 +96,38 @@
     @endif
 
     <h2>Production Pipeline</h2>
+    @foreach (['sorting' => 'Sorting', 'roasting' => 'Roasting', 'milling' => 'Milling (flour)'] as $key => $label)
+    @php($rows = $monthly['productionByItem'][$key]['rows'])
+    @php($t = $monthly['productionByItem'][$key]['totals'])
     <table>
         <thead>
-            <tr><th>Stage</th><th class="num">Input (kg)</th><th class="num">Loss (kg)</th><th class="num">Output (kg)</th><th class="num">Batches</th></tr>
+            <tr><th colspan="5">{{ $label }}</th></tr>
+            <tr><th>Item</th><th class="num">Input (kg)</th><th class="num">Loss (kg)</th><th class="num">Output (kg)</th><th class="num">Batches</th></tr>
         </thead>
         <tbody>
-            @foreach (['sorting' => 'Sorting', 'roasting' => 'Roasting', 'milling' => 'Milling (flour)'] as $key => $label)
-            @php($p = $monthly['production'][$key])
+            @forelse ($rows as $row)
             <tr>
-                <td>{{ $label }}</td>
-                <td class="num">{{ number_format($p['input'], 1) }}</td>
-                <td class="num">{{ number_format($p['loss'], 1) }}</td>
-                <td class="num">{{ number_format($p['output'], 1) }}</td>
-                <td class="num">{{ $p['batches'] }}</td>
+                <td>{{ $row['item'] }}</td>
+                <td class="num">{{ number_format($row['input'], 1) }}</td>
+                <td class="num">{{ number_format($row['loss'], 1) }}</td>
+                <td class="num">{{ number_format($row['output'], 1) }}</td>
+                <td class="num">{{ $row['batches'] }}</td>
             </tr>
-            @endforeach
+            @empty
+            <tr><td colspan="5" class="empty">No {{ strtolower($label) }} recorded this month.</td></tr>
+            @endforelse
+            @if ($rows->count() > 1)
+            <tr class="total">
+                <td>Total</td>
+                <td class="num">{{ number_format($t['input'], 1) }}</td>
+                <td class="num">{{ number_format($t['loss'], 1) }}</td>
+                <td class="num">{{ number_format($t['output'], 1) }}</td>
+                <td class="num">{{ $t['batches'] }}</td>
+            </tr>
+            @endif
         </tbody>
     </table>
+    @endforeach
 
     <h2>Packaging</h2>
     @if ($monthly['packagingByProduct']->isEmpty())
