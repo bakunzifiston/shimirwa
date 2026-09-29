@@ -31,6 +31,13 @@
         .cards .value { font-size: 15px; font-weight: bold; }
         .empty { color: #999; font-style: italic; padding: 6px; }
         .footer-note { margin-top: 20px; font-size: 9px; color: #999; }
+        .comments-page { page-break-before: always; }
+        .comments-box { border: 1px solid #ccc; border-radius: 3px; padding: 4px 12px 12px; margin-top: 4px; }
+        .comment-line { border-bottom: 1px solid #ccc; height: 26px; }
+        .comment-line:last-child { border-bottom: none; }
+        .signoff { width: 100%; margin-top: 28px; border-collapse: separate; border-spacing: 0 18px; }
+        .signoff td { border: none; padding: 0; font-size: 10px; color: #444; }
+        .signoff .field { display: inline-block; min-width: 170px; border-bottom: 1px solid #333; margin-left: 6px; }
     </style>
 </head>
 <body>
@@ -267,6 +274,28 @@
         </tbody>
     </table>
 
-    <p class="footer-note">Shimirwa Ltd — Monthly Report for {{ $from->format('F Y') }}. Generated automatically from system records on {{ now()->format('d M Y, H:i') }}.</p>
+    <div class="comments-page">
+        <h2>Comments</h2>
+        <div class="comments-box">
+            @for ($i = 0; $i < 8; $i++)
+            <div class="comment-line"></div>
+            @endfor
+        </div>
+
+        <table class="signoff">
+            <tr>
+                <td>Prepared by:<span class="field">&nbsp;</span></td>
+                <td>Signature:<span class="field">&nbsp;</span></td>
+                <td>Date:<span class="field">&nbsp;</span></td>
+            </tr>
+            <tr>
+                <td>Reviewed by:<span class="field">&nbsp;</span></td>
+                <td>Signature:<span class="field">&nbsp;</span></td>
+                <td>Date:<span class="field">&nbsp;</span></td>
+            </tr>
+        </table>
+
+        <p class="footer-note">Shimirwa Ltd — Monthly Report for {{ $from->format('F Y') }}. Generated automatically from system records on {{ now()->format('d M Y, H:i') }}.</p>
+    </div>
 </body>
 </html>

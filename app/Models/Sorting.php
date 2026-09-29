@@ -83,6 +83,14 @@ class Sorting extends Model
             if (!is_null($sorting->loss) && $sorting->loss > $sorting->quantity_in) {
                 throw new \Exception('Loss cannot exceed quantity in.');
             }
+
+            $sorting->initializePipelineBatchBalances();
+        });
+
+        static::updating(function ($sorting) {
+            if ($sorting->isDirty('quantity_in') || $sorting->isDirty('loss')) {
+                $sorting->refreshPipelineBatchRemaining();
+            }
         });
 
         static::created(function ($sorting) {

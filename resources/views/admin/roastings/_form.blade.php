@@ -17,12 +17,13 @@
     foreach ($sortingStocks as $s) {
         $item  = $s->rawMaterialStock?->item ?? '—';
         $batch = $s->rawMaterialStock?->batch_number ?? "Sorting #{$s->id}";
+        $avail = (float) $s->remainingUsable();
         $batchMeta->put('sorting:' . $s->id, [
             'key'    => 'sorting:' . $s->id,
-            'label'  => $item . ' — ' . $batch . ' (' . number_format($s->quantity_out, 1) . ' kg) [sorted]',
+            'label'  => $item . ' — ' . $batch . ' (' . number_format($avail, 1) . ' kg) [sorted]',
             'item'   => $item,
             'batch'  => $batch,
-            'avail'  => (float) $s->quantity_out,
+            'avail'  => $avail,
             'source' => 'sorting',
             'date'   => $s->date?->format('Y-m-d') ?? '',
         ]);
@@ -63,7 +64,7 @@
                 <optgroup label="From sorting">
                     @foreach ($sortingStocks as $s)
                         <option value="sorting:{{ $s->id }}" @selected(old('source_batch', $selectedSource) === 'sorting:'.$s->id)>
-                            {{ $s->rawMaterialStock?->item }} — {{ $s->rawMaterialStock?->batch_number }} ({{ number_format($s->quantity_out, 1) }} kg)
+                            {{ $s->rawMaterialStock?->item }} — {{ $s->rawMaterialStock?->batch_number }} ({{ number_format($s->remainingUsable(), 1) }} kg)
                         </option>
                     @endforeach
                 </optgroup>

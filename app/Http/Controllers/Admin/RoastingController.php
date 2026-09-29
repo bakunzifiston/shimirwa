@@ -129,19 +129,45 @@ class RoastingController extends Controller
         // (items NOT marked requires_sorting go straight from reception to roasting)
         $sortOnlyFirst = ProductCatalog::active()->production()->requiresSorting()->pluck('name');
 
+        // The batch currently selected on this roasting (edit mode) is always kept in
+        // its list, bypassing every other filter below, so the form never loses its
+        // own selection — even if the batch is now exhausted or its item's catalog
+        // flags have since changed.
         $rawStocks = RawMaterialStock::query()
-            ->where('quantity_in', '>', 0)
-            ->when($roastableItems->isNotEmpty(), fn ($q) => $q->whereIn('item', $roastableItems))
-            ->when($sortOnlyFirst->isNotEmpty(), fn ($q) => $q->whereNotIn('item', $sortOnlyFirst))
+            ->where(function ($q) use ($roasting, $roastableItems, $sortOnlyFirst) {
+                $q->where(function ($avail) use ($roastableItems, $sortOnlyFirst) {
+                    $avail->where('quantity_in', '>', 0);
+                    if ($roastableItems->isNotEmpty()) {
+                        $avail->whereIn('item', $roastableItems);
+                    }
+                    if ($sortOnlyFirst->isNotEmpty()) {
+                        $avail->whereNotIn('item', $sortOnlyFirst);
+                    }
+                });
+                if ($roasting->raw_material_stock_id) {
+                    $q->orWhere('id', $roasting->raw_material_stock_id);
+                }
+            })
             ->orderByDesc('date')
             ->get();
 
-        // Sorting batches whose item requires roasting (sorted first, then roasted)
+        // Sorting batches whose item requires roasting (sorted first, then roasted).
+        // Filter on the batch's actual remaining balance (falling back to its total
+        // output for the rare row that predates quantity_remaining tracking), not
+        // the batch's total output alone — a batch can have output but already be
+        // used up.
         $sortingStocks = Sorting::with('rawMaterialStock')
-            ->whereRaw('quantity_in - COALESCE(loss, 0) > 0')
-            ->when($roastableItems->isNotEmpty(), fn ($q) => $q->whereHas(
-                'rawMaterialStock', fn ($s) => $s->whereIn('item', $roastableItems)
-            ))
+            ->where(function ($q) use ($roasting, $roastableItems) {
+                $q->where(function ($avail) use ($roastableItems) {
+                    $avail->whereRaw('COALESCE(quantity_remaining, quantity_in - COALESCE(loss, 0)) > 0');
+                    if ($roastableItems->isNotEmpty()) {
+                        $avail->whereHas('rawMaterialStock', fn ($s) => $s->whereIn('item', $roastableItems));
+                    }
+                });
+                if ($roasting->sorting_id) {
+                    $q->orWhere('id', $roasting->sorting_id);
+                }
+            })
             ->orderByDesc('date')
             ->get();
 
