@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Emballage;
 use App\Models\Milling;
 use App\Models\Order;
+use App\Models\ProductCatalog;
 use App\Models\RawMaterialStock;
 use App\Models\Roasting;
 use App\Models\Sale;
@@ -108,13 +109,25 @@ class ReportController extends Controller
     private function monthlyReport(Carbon $from, Carbon $to): array
     {
         $dateRange = [$from->toDateString(), $to->toDateString()];
+        $canonicalItems = $this->canonicalItemNames();
 
         // ---- Raw materials received ----
+        // Grouped in PHP (not SQL) so differently-cased free-text entries for the
+        // same catalog item (e.g. a batch logged as "maize" instead of picking
+        // "Maize" from the dropdown) are merged into one row instead of splitting
+        // that item's totals across casing variants.
         $rawMaterials = RawMaterialStock::whereBetween('date', $dateRange)
-            ->selectRaw('item, type, SUM(received) as received, SUM(rejected) as rejected, COUNT(*) as batches')
-            ->groupBy('item', 'type')
-            ->orderBy('item')
-            ->get();
+            ->get(['item', 'type', 'received', 'rejected'])
+            ->groupBy(fn ($r) => $this->canonicalItem($r->item, $canonicalItems).'|'.$r->type)
+            ->map(fn ($rows) => (object) [
+                'item'     => $this->canonicalItem($rows->first()->item, $canonicalItems),
+                'type'     => $rows->first()->type,
+                'received' => (float) $rows->sum('received'),
+                'rejected' => (float) $rows->sum('rejected'),
+                'batches'  => $rows->count(),
+            ])
+            ->sortBy('item')
+            ->values();
 
         $rawMaterialsTotals = [
             'received' => (float) $rawMaterials->sum('received'),
@@ -157,7 +170,7 @@ class ReportController extends Controller
         ];
 
         // ---- Production pipeline, broken down by raw material item ----
-        $productionByItem = $this->productionByItem($dateRange);
+        $productionByItem = $this->productionByItem($dateRange, $canonicalItems);
 
         // ---- Packaging, by product ----
         $packagingByProduct = Emballage::with('packagingCatalog')
@@ -222,7 +235,7 @@ class ReportController extends Controller
         ];
 
         // ---- Stock levels as of the end of the selected month (not "live now") ----
-        $rawStockAsOf      = $this->rawMaterialBalanceAsOf($to);
+        $rawStockAsOf      = $this->rawMaterialBalanceAsOf($to, $canonicalItems);
         $flourStockAsOf    = $this->flourBalanceAsOf($to);
         $packagedStockAsOf = $this->packagedStockBalanceAsOf($to);
 
@@ -234,6 +247,27 @@ class ReportController extends Controller
             'shopOrdersByStatus', 'shopOrderTotals',
             'rawStockAsOf', 'flourStockAsOf', 'packagedStockAsOf'
         );
+    }
+
+    /**
+     * Map of lowercased catalog item name => canonical display name. Raw
+     * material stock can be logged under "Other" with a free-typed item
+     * name instead of the catalog dropdown, which can land with different
+     * casing than the catalog entry (e.g. "maize" vs "Maize"). Without this,
+     * reports that group by item name would split one item's totals across
+     * casing variants instead of merging them into a single row.
+     */
+    private function canonicalItemNames(): array
+    {
+        return ProductCatalog::active()->production()
+            ->pluck('name')
+            ->mapWithKeys(fn ($name) => [mb_strtolower($name) => $name])
+            ->all();
+    }
+
+    private function canonicalItem(string $item, array $canonicalItems): string
+    {
+        return $canonicalItems[mb_strtolower(trim($item))] ?? $item;
     }
 
     /**
@@ -251,45 +285,40 @@ class ReportController extends Controller
      * breakdown's totals are the literal sum of the rows shown, so the
      * table is internally consistent on its own.
      */
-    private function productionByItem(array $dateRange): array
+    private function productionByItem(array $dateRange, array $canonicalItems): array
     {
         $sortingByItem = Sorting::join('raw_material_stocks', 'sortings.raw_material_stock_id', '=', 'raw_material_stocks.id')
             ->whereBetween('sortings.date', $dateRange)
-            ->selectRaw('raw_material_stocks.item as item, SUM(sortings.quantity_in) as input, SUM(sortings.loss) as loss, COUNT(*) as batches')
-            ->groupBy('raw_material_stocks.item')
-            ->get()
-            ->map(fn ($row) => $this->pipelineRow($row->item, (float) $row->input, (float) $row->loss, (int) $row->batches))
+            ->get(['raw_material_stocks.item as item', 'sortings.quantity_in as input', 'sortings.loss as loss'])
+            ->groupBy(fn ($row) => $this->canonicalItem($row->item, $canonicalItems))
+            ->map(fn ($rows, $item) => $this->pipelineRow($item, (float) $rows->sum('input'), (float) $rows->sum('loss'), $rows->count()))
             ->sortBy('item')
             ->values();
 
         $roastingDirect = Roasting::join('raw_material_stocks', 'roastings.raw_material_stock_id', '=', 'raw_material_stocks.id')
             ->whereBetween('roastings.date', $dateRange)
-            ->selectRaw('raw_material_stocks.item as item, SUM(roastings.quantity_in) as input, SUM(roastings.loss) as loss, COUNT(*) as batches')
-            ->groupBy('raw_material_stocks.item')
-            ->get();
+            ->get(['raw_material_stocks.item as item', 'roastings.quantity_in as input', 'roastings.loss as loss']);
 
         $roastingViaSorting = Roasting::join('sortings', 'roastings.sorting_id', '=', 'sortings.id')
             ->join('raw_material_stocks', 'sortings.raw_material_stock_id', '=', 'raw_material_stocks.id')
             ->whereBetween('roastings.date', $dateRange)
-            ->selectRaw('raw_material_stocks.item as item, SUM(roastings.quantity_in) as input, SUM(roastings.loss) as loss, COUNT(*) as batches')
-            ->groupBy('raw_material_stocks.item')
-            ->get();
+            ->get(['raw_material_stocks.item as item', 'roastings.quantity_in as input', 'roastings.loss as loss']);
 
         $roastingByItem = $roastingDirect->concat($roastingViaSorting)
-            ->groupBy('item')
-            ->map(fn ($rows, $item) => $this->pipelineRow($item, (float) $rows->sum('input'), (float) $rows->sum('loss'), (int) $rows->sum('batches')))
+            ->groupBy(fn ($row) => $this->canonicalItem($row->item, $canonicalItems))
+            ->map(fn ($rows, $item) => $this->pipelineRow($item, (float) $rows->sum('input'), (float) $rows->sum('loss'), $rows->count()))
             ->sortBy('item')
             ->values();
 
         $millingBatchCount = Milling::whereBetween('date', $dateRange)->count();
         $millingTotals = [];
-        Milling::whereBetween('date', $dateRange)->get()->each(function (Milling $milling) use (&$millingTotals) {
+        Milling::whereBetween('date', $dateRange)->get()->each(function (Milling $milling) use (&$millingTotals, $canonicalItems) {
             $ingredients = $milling->resolvedIngredients();
             $batchMixed  = (float) $ingredients->reject(fn ($i) => $i['excluded_from_weight'])->sum('quantity');
             $batchLoss   = (float) $milling->loss;
 
             foreach ($ingredients as $ing) {
-                $item = $ing['item_name'];
+                $item = $this->canonicalItem($ing['item_name'], $canonicalItems);
                 $qty  = (float) $ing['quantity'];
                 $itemLoss = (! $ing['excluded_from_weight'] && $batchMixed > 0)
                     ? $batchLoss * ($qty / $batchMixed)
@@ -349,30 +378,31 @@ class ReportController extends Controller
      * the Sorting/Roasting/Milling/Emballage model events, but scoped to
      * "as of" a point in time instead of "right now".
      */
-    private function rawMaterialBalanceAsOf(Carbon $asOf): \Illuminate\Support\Collection
+    private function rawMaterialBalanceAsOf(Carbon $asOf, array $canonicalItems): \Illuminate\Support\Collection
     {
         $asOfDate = $asOf->toDateString();
 
         $received = RawMaterialStock::where('date', '<=', $asOfDate)
-            ->selectRaw('item, SUM(received) - SUM(rejected) as net')
-            ->groupBy('item')
-            ->pluck('net', 'item');
+            ->get(['item', 'received', 'rejected'])
+            ->groupBy(fn ($r) => $this->canonicalItem($r->item, $canonicalItems))
+            ->map(fn ($rows) => (float) $rows->sum('received') - (float) $rows->sum('rejected'));
 
         $sortingConsumed = Sorting::join('raw_material_stocks', 'sortings.raw_material_stock_id', '=', 'raw_material_stocks.id')
             ->where('sortings.date', '<=', $asOfDate)
-            ->selectRaw('raw_material_stocks.item as item, SUM(sortings.quantity_in) as qty')
-            ->groupBy('raw_material_stocks.item')
-            ->pluck('qty', 'item');
+            ->get(['raw_material_stocks.item as item', 'sortings.quantity_in as qty'])
+            ->groupBy(fn ($row) => $this->canonicalItem($row->item, $canonicalItems))
+            ->map(fn ($rows) => (float) $rows->sum('qty'));
 
         // Only roastings sourced directly from raw material draw from raw_material_stocks —
         // roastings sourced from a sorting batch draw from that sorting's remaining stock instead.
         $roastingConsumed = Roasting::join('raw_material_stocks', 'roastings.raw_material_stock_id', '=', 'raw_material_stocks.id')
             ->where('roastings.date', '<=', $asOfDate)
-            ->selectRaw('raw_material_stocks.item as item, SUM(roastings.quantity_in) as qty')
-            ->groupBy('raw_material_stocks.item')
-            ->pluck('qty', 'item');
+            ->get(['raw_material_stocks.item as item', 'roastings.quantity_in as qty'])
+            ->groupBy(fn ($row) => $this->canonicalItem($row->item, $canonicalItems))
+            ->map(fn ($rows) => (float) $rows->sum('qty'));
 
-        $rawStockItemMap = RawMaterialStock::pluck('item', 'id');
+        $rawStockItemMap = RawMaterialStock::get(['id', 'item'])
+            ->mapWithKeys(fn ($r) => [$r->id => $this->canonicalItem($r->item, $canonicalItems)]);
 
         $millingConsumed = [];
         Milling::where('date', '<=', $asOfDate)->select('items')->get()->each(function ($milling) use (&$millingConsumed, $rawStockItemMap) {
