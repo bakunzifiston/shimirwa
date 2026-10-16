@@ -112,8 +112,11 @@ class RawMaterialStock extends Model
             if ($stock->isDirty('received') || $stock->isDirty('rejected')) {
                 $consumed = (float) \DB::table('sortings')->where('raw_material_stock_id', $stock->id)->sum('quantity_in')
                           + (float) \DB::table('roastings')->where('raw_material_stock_id', $stock->id)->sum('quantity_in');
+                $adjusted = \Illuminate\Support\Facades\Schema::hasTable('stock_adjustments')
+                    ? (float) \DB::table('stock_adjustments')->where('stock_type', 'raw')->where('stock_id', $stock->id)->sum('quantity_change')
+                    : 0.0;
                 $base     = max((float) $stock->received - (float) $stock->rejected, 0);
-                $stock->quantity_in = max($base - $consumed, 0);
+                $stock->quantity_in = max($base - $consumed + $adjusted, 0);
             }
         });
     }

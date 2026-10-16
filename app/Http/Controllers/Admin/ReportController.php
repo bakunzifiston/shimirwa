@@ -11,6 +11,8 @@ use App\Models\RawMaterialStock;
 use App\Models\Roasting;
 use App\Models\Sale;
 use App\Models\Sorting;
+use App\Models\StockAdjustment;
+use App\Support\Inventory\PackagedUnits;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -417,36 +419,33 @@ class ReportController extends Controller
             }
         });
 
+        // Based on units originally packed — emballages.item has since been
+        // reduced by sales, which don't give packaging material back.
+        $soldAll = PackagedUnits::soldByEmballage();
+        $adjustedAll = PackagedUnits::adjustedByEmballage();
         $packagingMaterialConsumed = [];
         Emballage::with('packagingCatalog')
             ->where('date', '<=', $asOfDate)
             ->get()
-            ->each(function (Emballage $e) use (&$packagingMaterialConsumed, $rawStockItemMap) {
-                $primaryUnits = $e->primaryPackagingUnits();
-                if ($e->raw_material_stock_id && $primaryUnits > 0) {
-                    $item = $rawStockItemMap[$e->raw_material_stock_id] ?? null;
+            ->each(function (Emballage $e) use (&$packagingMaterialConsumed, $rawStockItemMap, $soldAll, $adjustedAll) {
+                $packed = PackagedUnits::original($e, $soldAll, $adjustedAll);
+                foreach (PackagedUnits::materialDraws($e, $packed) as [$stockId, $units]) {
+                    $item = $rawStockItemMap[$stockId] ?? null;
                     if ($item) {
-                        $packagingMaterialConsumed[$item] = ($packagingMaterialConsumed[$item] ?? 0) + $primaryUnits;
+                        $packagingMaterialConsumed[$item] = ($packagingMaterialConsumed[$item] ?? 0) + $units;
                     }
                 }
+            });
 
-                foreach ($e->packaging_overflow ?? [] as $ov) {
-                    $stockId = $ov['stock_id'] ?? null;
-                    $units   = (float) ($ov['units'] ?? 0);
-                    if ($stockId && $units > 0) {
-                        $item = $rawStockItemMap[$stockId] ?? null;
-                        if ($item) {
-                            $packagingMaterialConsumed[$item] = ($packagingMaterialConsumed[$item] ?? 0) + $units;
-                        }
-                    }
-                }
-
-                $innerUnits = $e->innerUnitsTotal();
-                if ($innerUnits > 0 && $e->inner_stock_id) {
-                    $item = $rawStockItemMap[$e->inner_stock_id] ?? null;
-                    if ($item) {
-                        $packagingMaterialConsumed[$item] = ($packagingMaterialConsumed[$item] ?? 0) + $innerUnits;
-                    }
+        // Corrections from physical stock counts (php artisan stock:apply-count)
+        $adjusted = [];
+        StockAdjustment::where('stock_type', StockAdjustment::TYPE_RAW)
+            ->whereDate('date', '<=', $asOfDate)
+            ->get(['stock_id', 'quantity_change'])
+            ->each(function ($a) use (&$adjusted, $rawStockItemMap) {
+                $item = $rawStockItemMap[$a->stock_id] ?? null;
+                if ($item) {
+                    $adjusted[$item] = ($adjusted[$item] ?? 0) + (float) $a->quantity_change;
                 }
             });
 
@@ -455,17 +454,19 @@ class ReportController extends Controller
             ->merge($roastingConsumed->keys())
             ->merge(array_keys($millingConsumed))
             ->merge(array_keys($packagingMaterialConsumed))
+            ->merge(array_keys($adjusted))
             ->unique()
             ->sort()
             ->values();
 
         return $items
-            ->map(function ($item) use ($received, $sortingConsumed, $roastingConsumed, $millingConsumed, $packagingMaterialConsumed) {
+            ->map(function ($item) use ($received, $sortingConsumed, $roastingConsumed, $millingConsumed, $packagingMaterialConsumed, $adjusted) {
                 $balance = (float) ($received[$item] ?? 0)
                     - (float) ($sortingConsumed[$item] ?? 0)
                     - (float) ($roastingConsumed[$item] ?? 0)
                     - (float) ($millingConsumed[$item] ?? 0)
-                    - (float) ($packagingMaterialConsumed[$item] ?? 0);
+                    - (float) ($packagingMaterialConsumed[$item] ?? 0)
+                    + (float) ($adjusted[$item] ?? 0);
 
                 return (object) ['item' => $item, 'remaining' => $balance];
             })
@@ -490,36 +491,35 @@ class ReportController extends Controller
 
         $packaged = (float) Emballage::where('date', '<=', $asOfDate)->sum('quantity');
 
-        return max($produced - $packaged, 0);
+        $adjusted = (float) StockAdjustment::where('stock_type', StockAdjustment::TYPE_MILLING)
+            ->whereDate('date', '<=', $asOfDate)
+            ->sum('quantity_change');
+
+        return max($produced - $packaged + $adjusted, 0);
     }
 
     /**
-     * Packaged product balance per product as of a given date: units
-     * packaged up to that date minus units sold net of returns up to that
-     * date. Mirrors stockReport()'s opening-balance calculation, scoped to
-     * an arbitrary "as of" date instead of a report window's start.
+     * Packaged product balance per product as of a given date. emballages.item
+     * is the live unit count — already reduced by every sale and stock-count
+     * adjustment — so the balance on a past date is the live count plus net
+     * units sold after that date, minus adjustments dated after it.
      */
     private function packagedStockBalanceAsOf(Carbon $asOf): \Illuminate\Support\Collection
     {
         $asOfDate = $asOf->toDateString();
 
-        $packagedIn = Emballage::with('packagingCatalog')
+        $soldAfter = PackagedUnits::soldByEmballage($asOfDate);
+        $adjustedAfter = PackagedUnits::adjustedByEmballage($asOfDate);
+
+        return Emballage::with('packagingCatalog')
             ->where('date', '<=', $asOfDate)
             ->get()
             ->groupBy(fn ($e) => $e->packagingCatalog?->name ?? strtoupper($e->packaging_type ?? 'Unknown'))
-            ->map(fn ($rows) => (float) $rows->sum('item'));
-
-        $soldOut = Sale::where('date', '<=', $asOfDate)
-            ->selectRaw('item, SUM(quantity) - SUM(returned) as net_sold')
-            ->groupBy('item')
-            ->pluck('net_sold', 'item');
-
-        $names = collect($packagedIn->keys())->merge($soldOut->keys())->unique()->sort()->values();
-
-        return $names
-            ->map(fn ($name) => [
+            ->map(fn ($rows, $name) => [
                 'name'  => $name,
-                'units' => (float) ($packagedIn[$name] ?? 0) - (float) ($soldOut[$name] ?? 0),
+                'units' => (float) $rows->sum(fn ($e) => (float) $e->item
+                    + (float) ($soldAfter[$e->id] ?? 0)
+                    - (float) ($adjustedAfter[$e->id] ?? 0)),
             ])
             ->filter(fn ($row) => $row['units'] > 0.01)
             ->sortByDesc('units')
