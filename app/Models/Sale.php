@@ -131,7 +131,7 @@ class Sale extends Model
      *
      * @return array<int, int>
      */
-    private static function netBatchRestoreMap(Sale $sale): array
+    public static function netBatchRestoreMap(Sale $sale): array
     {
         $batches = $sale->batches ?? [];
         $returned = min((int) ($sale->returned ?? 0), (int) collect($batches)->sum(fn ($b) => (int) ($b['quantity'] ?? 0)));
