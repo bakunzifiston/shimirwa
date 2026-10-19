@@ -397,16 +397,19 @@ class ApplyClosingStockCount extends Command
     }
 
     /**
-     * Exact match on the normalised batch number first; failing that, match
-     * the digits alone, limited to batches whose item contains $item.
+     * Batch numbers in the app carry a date prefix ("15SeptM2602130") that
+     * the count sheet leaves out ("M2602130"), so a batch matches when its
+     * normalised number ends with the code. Failing that, the digits alone
+     * are matched the same way, limited to batches whose item contains $item.
      */
     private function matchBatch(string $code, ?string $item, array $candidates): \Illuminate\Support\Collection
     {
         $pool = collect($candidates)->filter(fn ($c) => $c['ref'] !== '');
+        $wanted = $this->normalize($code);
 
-        $exact = $pool->filter(fn ($c) => $this->normalize($c['ref']) === $this->normalize($code));
-        if ($exact->isNotEmpty()) {
-            return $exact->values();
+        $byCode = $pool->filter(fn ($c) => $wanted !== '' && str_ends_with($this->normalize($c['ref']), $wanted));
+        if ($byCode->isNotEmpty()) {
+            return $byCode->values();
         }
 
         $digits = preg_replace('/\D/', '', $code);
@@ -415,7 +418,7 @@ class ApplyClosingStockCount extends Command
         }
 
         return $pool
-            ->filter(fn ($c) => preg_replace('/\D/', '', $c['ref']) === $digits)
+            ->filter(fn ($c) => str_ends_with(preg_replace('/\D/', '', $c['ref']), $digits))
             ->filter(fn ($c) => ! $item || str_contains($this->normalize($c['item']), $this->normalize($item)))
             ->values();
     }
