@@ -89,42 +89,127 @@ class ApplyClosingStockCount extends Command
 
         $count = require $file;
 
-        $this->loadDraws();
-        $this->loadAdjustments();
+        // Everything runs in one transaction: batches missing from the system
+        // are created first so they're planned like any other batch, and a
+        // dry run (or any error) rolls the whole thing back.
+        DB::beginTransaction();
 
-        $plan = [
-            StockAdjustment::TYPE_RAW      => $this->planByBatch(StockAdjustment::TYPE_RAW, $this->rawCandidates(), $count['raw'] ?? []),
-            StockAdjustment::TYPE_SORTING  => $this->planByBatch(StockAdjustment::TYPE_SORTING, $this->sortingCandidates(), $count['sorting'] ?? []),
-            StockAdjustment::TYPE_ROASTING => $this->planByBatch(StockAdjustment::TYPE_ROASTING, $this->roastingCandidates(), $count['roasting'] ?? []),
-            StockAdjustment::TYPE_MILLING  => $this->planByBatch(StockAdjustment::TYPE_MILLING, $this->millingCandidates(), $count['milling'] ?? []),
-            StockAdjustment::TYPE_PACKAGED => $this->planPackaged($this->packagedCandidates(), $count['packaged'] ?? []),
-        ];
+        try {
+            $created = $this->createMissingBatches($count);
 
-        $this->report($plan);
+            $this->loadDraws();
+            $this->loadAdjustments();
 
-        if ($this->errors) {
-            $this->newLine();
-            foreach ($this->errors as $error) {
-                $this->error($error);
+            $plan = [
+                StockAdjustment::TYPE_RAW      => $this->planByBatch(StockAdjustment::TYPE_RAW, $this->rawCandidates(), $count['raw'] ?? []),
+                StockAdjustment::TYPE_SORTING  => $this->planByBatch(StockAdjustment::TYPE_SORTING, $this->sortingCandidates(), $count['sorting'] ?? []),
+                StockAdjustment::TYPE_ROASTING => $this->planByBatch(StockAdjustment::TYPE_ROASTING, $this->roastingCandidates(), $count['roasting'] ?? []),
+                StockAdjustment::TYPE_MILLING  => $this->planByBatch(StockAdjustment::TYPE_MILLING, $this->millingCandidates(), $count['milling'] ?? []),
+                StockAdjustment::TYPE_PACKAGED => $this->planPackaged($this->packagedCandidates(), $count['packaged'] ?? []),
+            ];
+
+            $this->report($plan, $created);
+
+            if ($this->errors) {
+                DB::rollBack();
+                $this->newLine();
+                foreach ($this->errors as $error) {
+                    $this->error($error);
+                }
+                $this->error('Nothing was written. Fix the count file and run again.');
+
+                return self::FAILURE;
             }
-            $this->error('Nothing was written. Fix the count file and run again.');
 
-            return self::FAILURE;
+            if (! $this->option('apply')) {
+                DB::rollBack();
+                $this->newLine();
+                $this->warn('Dry run: nothing was written. Run again with --apply to save these changes.');
+
+                return self::SUCCESS;
+            }
+
+            [$adjusted, $updated] = $this->write($plan);
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            throw $e;
         }
-
-        if (! $this->option('apply')) {
-            $this->newLine();
-            $this->warn('Dry run: nothing was written. Run again with --apply to save these changes.');
-
-            return self::SUCCESS;
-        }
-
-        [$adjusted, $updated] = DB::transaction(fn () => $this->write($plan));
 
         $this->newLine();
-        $this->info("Recorded {$adjusted} adjustment(s) dated {$this->date} and updated {$updated} live balance(s).");
+        $this->info(sprintf('Created %d missing batch(es), recorded %d adjustment(s) dated %s and updated %d live balance(s).',
+            count($created), $adjusted, $this->date, $updated));
 
         return self::SUCCESS;
+    }
+
+    // -----------------------------------------------------------------------
+    // Batches on the count sheet that were never entered
+    // -----------------------------------------------------------------------
+
+    /**
+     * A count line with a 'create' block whose batch doesn't exist yet is
+     * created on the sheet's date holding the counted quantity: a reception
+     * for raw/packaging material, a roasting batch for roasting. Client,
+     * employee and type are copied from the latest record of the same item.
+     *
+     * @return array<int, string> one description per created batch
+     */
+    private function createMissingBatches(array $count): array
+    {
+        $created = [];
+        $note = 'Added from closing stock count '.Carbon::parse($this->date)->format('d/m/Y');
+
+        foreach ($count['raw'] ?? [] as $line) {
+            $spec = $line['create'] ?? null;
+            if (! $spec || $this->matchBatch((string) $line['batch'], $line['item'] ?? null, $this->rawCandidates())->isNotEmpty()) {
+                continue;
+            }
+
+            $template = RawMaterialStock::whereRaw('LOWER(TRIM(item)) = ?', [mb_strtolower($spec['item'])])->latest('date')->first();
+
+            RawMaterialStock::create([
+                'date'         => $spec['date'],
+                'item'         => $spec['item'],
+                'type'         => $spec['type'] ?? $template?->type ?? 'Raw Material',
+                'received'     => (float) $line['qty'],
+                'rejected'     => 0,
+                'batch_number' => $spec['batch_number'],
+                'client_id'    => $template?->client_id ?? DB::table('clients')->value('id'),
+                'employee_id'  => $template?->employee_id ?? DB::table('employees')->value('id'),
+                'comment'      => $note,
+            ]);
+            $created[] = "Reception {$spec['batch_number']} ({$spec['item']}, {$spec['date']}): {$this->fmt((float) $line['qty'])}";
+        }
+
+        foreach ($count['roasting'] ?? [] as $line) {
+            $spec = $line['create'] ?? null;
+            if (! $spec || $this->matchBatch((string) $line['batch'], $line['item'] ?? null, $this->roastingCandidates())->isNotEmpty()) {
+                continue;
+            }
+
+            $source = $this->matchBatch((string) $spec['source_batch'], $line['item'] ?? null, $this->rawCandidates())->first();
+            $template = Roasting::latest('date')->first();
+
+            // Inserted directly: Roasting's model events would draw the
+            // quantity from the source batch, which the count already covers.
+            DB::table('roastings')->insert([
+                'date'                  => $spec['date'],
+                'batch'                 => $spec['batch'],
+                'quantity_in'           => (float) $line['qty'],
+                'loss'                  => 0,
+                'quantity_remaining'    => (float) $line['qty'],
+                'raw_material_stock_id' => $source['id'] ?? null,
+                'chef_id'               => $template?->chef_id ?? DB::table('employees')->value('id'),
+                'supervisor_id'         => $template?->supervisor_id ?? DB::table('employees')->value('id'),
+                'created_at'            => now(),
+                'updated_at'            => now(),
+            ]);
+            $created[] = "Roasting {$spec['batch']} ({$spec['date']}): {$this->fmt((float) $line['qty'])}";
+        }
+
+        return $created;
     }
 
     // -----------------------------------------------------------------------
@@ -224,17 +309,8 @@ class ApplyClosingStockCount extends Command
 
     private function rawCandidates(): array
     {
-        $types = ['raw material', 'packaging material', 'packaging staff'];
-
-        $outOfScope = RawMaterialStock::whereDate('date', '<=', $this->date)
-            ->whereNotIn(DB::raw('LOWER(TRIM(type))'), $types)
-            ->count();
-        if ($outOfScope) {
-            $this->warn("{$outOfScope} stock record(s) of other types (not raw or packaging material) were left untouched.");
-        }
-
+        // Every type, "Other" included: the count sheet covers all stock.
         return RawMaterialStock::whereDate('date', '<=', $this->date)
-            ->whereIn(DB::raw('LOWER(TRIM(type))'), $types)
             ->get()
             ->map(fn (RawMaterialStock $r) => [
                 'id'      => $r->id,
@@ -484,9 +560,17 @@ class ApplyClosingStockCount extends Command
     // Output & writing
     // -----------------------------------------------------------------------
 
-    private function report(array $plan): void
+    private function report(array $plan, array $created): void
     {
         $this->info("Closing stock count as of {$this->date}");
+
+        if ($created) {
+            $this->newLine();
+            $this->line('<options=bold>Batches on the sheet that were missing, created with the counted quantity</>');
+            foreach ($created as $line) {
+                $this->line("  + {$line}");
+            }
+        }
 
         foreach ($plan as $type => $rows) {
             $visible = collect($rows)->filter(fn ($r) => abs($r['book']) >= self::EPSILON
